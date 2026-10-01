@@ -1,0 +1,147 @@
+package com.virtualcompany.modules.ticket.service;
+
+import com.virtualcompany.common.exception.ResourceNotFoundException;
+import com.virtualcompany.modules.company.dto.CompanyResponse;
+import com.virtualcompany.modules.enrollment.entity.EnrollmentStatus;
+import com.virtualcompany.modules.enrollment.entity.StudentProjectEnrollment;
+import com.virtualcompany.modules.enrollment.repository.EnrollmentRepository;
+import com.virtualcompany.modules.project.dto.ProjectResponse;
+import com.virtualcompany.modules.ticket.dto.TicketResponse;
+import com.virtualcompany.modules.ticket.dto.UpdateTicketStatusRequest;
+import com.virtualcompany.modules.ticket.dto.WorkspaceResponse;
+import com.virtualcompany.modules.ticket.entity.ProjectTicket;
+import com.virtualcompany.modules.ticket.entity.StudentTicketProgress;
+import com.virtualcompany.modules.ticket.entity.TicketStatus;
+import com.virtualcompany.modules.ticket.repository.ProjectTicketRepository;
+import com.virtualcompany.modules.ticket.repository.StudentTicketProgressRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class TicketService {
+
+    private final ProjectTicketRepository ticketRepository;
+    private final StudentTicketProgressRepository progressRepository;
+    private final EnrollmentRepository enrollmentRepository;
+    private final AiTechLeadService aiTechLeadService;
+
+    @Transactional(readOnly = true)
+    public List<TicketResponse> getProjectTickets(UUID projectId) {
+        List<ProjectTicket> tickets = ticketRepository.findByProjectIdOrderByOrderIndexAsc(projectId);
+        return tickets.stream()
+                .map(t -> TicketResponse.fromEntity(t, null))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public WorkspaceResponse getWorkspace(UUID enrollmentId) {
+        StudentProjectEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Enrollment", "id", enrollmentId));
+
+        UUID projectId = enrollment.getProject().getId();
+        List<ProjectTicket> projectTickets = ticketRepository.findByProjectIdOrderByOrderIndexAsc(projectId);
+        List<StudentTicketProgress> existingProgress = progressRepository.findByEnrollmentId(enrollmentId);
+
+        Map<UUID, StudentTicketProgress> progressMap = existingProgress.stream()
+                .collect(Collectors.toMap(p -> p.getTicket().getId(), p -> p));
+
+        List<TicketResponse> ticketResponses = new ArrayList<>();
+        int completedCount = 0;
+        String nextTicketKey = null;
+
+        for (ProjectTicket ticket : projectTickets) {
+            StudentTicketProgress prog = progressMap.get(ticket.getId());
+
+            // Initialize progress as TODO if not already tracked
+            if (prog == null) {
+                prog = StudentTicketProgress.builder()
+                        .enrollment(enrollment)
+                        .ticket(ticket)
+                        .status(TicketStatus.TODO)
+                        .build();
+                prog = progressRepository.save(prog);
+            }
+
+            if (prog.getStatus() == TicketStatus.DONE) {
+                completedCount++;
+            } else if (nextTicketKey == null) {
+                nextTicketKey = ticket.getTicketKey();
+            }
+
+            ticketResponses.add(TicketResponse.fromEntity(ticket, prog));
+        }
+
+        int total = projectTickets.size();
+        int progressPercentage = total > 0 ? (int) Math.round(((double) completedCount / total) * 100) : 0;
+
+        if (progressPercentage == 100 && enrollment.getStatus() != EnrollmentStatus.COMPLETED) {
+            enrollment.setStatus(EnrollmentStatus.COMPLETED);
+            enrollment.setCompletedAt(Instant.now());
+            enrollmentRepository.save(enrollment);
+        }
+
+        return WorkspaceResponse.builder()
+                .enrollmentId(enrollment.getId())
+                .project(ProjectResponse.fromEntity(enrollment.getProject()))
+                .company(CompanyResponse.fromEntity(enrollment.getProject().getCompany()))
+                .tickets(ticketResponses)
+                .totalTickets(total)
+                .completedTickets(completedCount)
+                .progressPercentage(progressPercentage)
+                .suggestedNextTicketKey(nextTicketKey)
+                .build();
+    }
+
+    @Transactional
+    public TicketResponse updateTicketStatus(
+            UUID enrollmentId,
+            UUID ticketId,
+            UpdateTicketStatusRequest request
+    ) {
+        StudentProjectEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Enrollment", "id", enrollmentId));
+
+        ProjectTicket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new ResourceNotFoundException("ProjectTicket", "id", ticketId));
+
+        StudentTicketProgress progress = progressRepository
+                .findByEnrollmentIdAndTicketId(enrollmentId, ticketId)
+                .orElseGet(() -> StudentTicketProgress.builder()
+                        .enrollment(enrollment)
+                        .ticket(ticket)
+                        .status(TicketStatus.TODO)
+                        .build());
+
+        TicketStatus newStatus = request.getStatus();
+        progress.setStatus(newStatus);
+
+        if (request.getSubmissionNotes() != null) {
+            progress.setSubmissionNotes(request.getSubmissionNotes().trim());
+        }
+
+        if (newStatus == TicketStatus.IN_PROGRESS && progress.getStartedAt() == null) {
+            progress.setStartedAt(Instant.now());
+            if (progress.getBranchName() == null) {
+                String cleanTitle = ticket.getTitle().toLowerCase()
+                        .replaceAll("[^a-z0-9]+", "-")
+                        .replaceAll("^-|-$", "");
+                progress.setBranchName("feature/" + ticket.getTicketKey().toLowerCase() + "-" + cleanTitle);
+            }
+        } else if (newStatus == TicketStatus.IN_REVIEW) {
+            // Generate automated AI review feedback
+            String feedback = aiTechLeadService.generateReviewFeedback(ticket, progress.getSubmissionNotes());
+            progress.setAiReviewFeedback(feedback);
+        } else if (newStatus == TicketStatus.DONE) {
+            progress.setCompletedAt(Instant.now());
+        }
+
+        StudentTicketProgress saved = progressRepository.save(progress);
+        return TicketResponse.fromEntity(ticket, saved);
+    }
+}
