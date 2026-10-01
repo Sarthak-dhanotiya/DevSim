@@ -8,13 +8,20 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Service
 public class EmailService {
 
     private final Optional<JavaMailSender> mailSender;
+    private final HttpClient httpClient;
 
     @Value("${spring.mail.username:}")
     private String mailUsername;
@@ -25,11 +32,23 @@ public class EmailService {
     @Value("${app.frontend-url:http://localhost:3000}")
     private String frontendUrl;
 
+    @Value("${app.mail.resend-api-key:${RESEND_API_KEY:}}")
+    private String resendApiKey;
+
     public EmailService(@Autowired(required = false) JavaMailSender mailSender) {
         this.mailSender = Optional.ofNullable(mailSender);
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .build();
     }
 
     public void sendWelcomeCredentialsEmail(String toEmail, String studentName, String generatedPassword) {
+        log.info("==================================================================");
+        log.info("🔑 [DEVSIM CREDENTIALS] Generated login credentials for [{}]", toEmail);
+        log.info("   Student Name: {}", studentName);
+        log.info("   Password:     {}", generatedPassword);
+        log.info("==================================================================");
+
         String subject = "Welcome to DevSim — Your Developer Account Credentials";
         String loginUrl = frontendUrl.replaceAll("/+$", "") + "/login";
 
@@ -81,10 +100,16 @@ public class EmailService {
                 </html>
                 """.formatted(studentName, toEmail, generatedPassword, loginUrl);
 
-        sendEmail(toEmail, subject, htmlContent);
+        sendEmailAsync(toEmail, subject, htmlContent);
     }
 
     public void sendPasswordResetOtpEmail(String toEmail, String studentName, String otpCode) {
+        log.info("==================================================================");
+        log.info("🔢 [DEVSIM OTP] Password reset verification code for [{}]", toEmail);
+        log.info("   Student Name: {}", studentName);
+        log.info("   OTP Code:     {} (valid for 10 minutes)", otpCode);
+        log.info("==================================================================");
+
         String subject = "DevSim — Password Reset Verification Code";
         String resetUrl = frontendUrl.replaceAll("/+$", "") + "/reset-password?email=" + toEmail + "&otp=" + otpCode;
 
@@ -137,20 +162,67 @@ public class EmailService {
                 </html>
                 """.formatted(studentName != null ? studentName : "Developer", otpCode, resetUrl);
 
-        sendEmail(toEmail, subject, htmlContent);
+        sendEmailAsync(toEmail, subject, htmlContent);
     }
 
-    private void sendEmail(String toEmail, String subject, String htmlContent) {
-        if (mailSender.isEmpty() || mailUsername == null || mailUsername.isBlank()) {
-            log.info("==================================================================");
-            log.info(" [MOCK / LOCAL EMAIL SENDER]");
-            log.info(" To: {}", toEmail);
-            log.info(" Subject: {}", subject);
-            log.info(" SMTP not configured, logging email. To enable real SMTP, configure SPRING_MAIL_USERNAME and SPRING_MAIL_PASSWORD.");
-            log.info("==================================================================");
-            return;
-        }
+    private void sendEmailAsync(String toEmail, String subject, String htmlContent) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                // 1. Try Resend HTTPS API if API key configured (Render Free friendly on port 443)
+                if (resendApiKey != null && !resendApiKey.isBlank()) {
+                    boolean sent = sendViaResend(toEmail, subject, htmlContent);
+                    if (sent) return;
+                }
 
+                // 2. Try SMTP if mail credentials configured
+                if (mailSender.isPresent() && mailUsername != null && !mailUsername.isBlank()) {
+                    sendViaSmtp(toEmail, subject, htmlContent);
+                    return;
+                }
+
+                log.info("📬 [MOCK EMAIL] Real dispatch skipped. Credentials/OTP are logged above.");
+            } catch (Exception ex) {
+                log.warn("Email delivery failed to {}: {}. Continuing without breaking user flow.", toEmail, ex.getMessage());
+            }
+        });
+    }
+
+    private boolean sendViaResend(String toEmail, String subject, String htmlContent) {
+        try {
+            String from = (mailFrom != null && !mailFrom.isBlank() && !mailFrom.contains("localhost"))
+                    ? mailFrom
+                    : "onboarding@resend.dev";
+
+            String escapedSubject = subject.replace("\"", "\\\"");
+            String escapedHtml = htmlContent.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
+
+            String jsonPayload = String.format(
+                    "{\"from\":\"%s\",\"to\":[\"%s\"],\"subject\":\"%s\",\"html\":\"%s\"}",
+                    from, toEmail, escapedSubject, escapedHtml
+            );
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.resend.com/emails"))
+                    .header("Authorization", "Bearer " + resendApiKey.trim())
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(10))
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                log.info("Email delivered via Resend HTTPS API (Port 443) to {}", toEmail);
+                return true;
+            } else {
+                log.warn("Resend API status {}: {}. Falling back...", response.statusCode(), response.body());
+            }
+        } catch (Exception e) {
+            log.warn("Resend HTTPS API dispatch failed: {}. Falling back...", e.getMessage());
+        }
+        return false;
+    }
+
+    private void sendViaSmtp(String toEmail, String subject, String htmlContent) {
         try {
             JavaMailSender sender = mailSender.get();
             MimeMessage message = sender.createMimeMessage();
@@ -165,7 +237,7 @@ public class EmailService {
             sender.send(message);
             log.info("Email successfully sent via SMTP to {}", toEmail);
         } catch (Exception ex) {
-            log.error("Failed to send email to {}: {}. Continuing without breaking user flow.", toEmail, ex.getMessage());
+            log.warn("SMTP send failed to {} (Render Free tier blocks outbound SMTP ports 25/465/587): {}. (Credentials/OTP are logged above)", toEmail, ex.getMessage());
         }
     }
 }
