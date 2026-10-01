@@ -67,7 +67,7 @@ class ApiClient {
   }
 
   // --- AUTH ---
-  async register(body: { name: string; email: string; password: string }) {
+  async register(body: { name: string; email: string; password?: string }) {
     return this.request<{
       token: string;
       tokenType: string;
@@ -76,6 +76,20 @@ class ApiClient {
       role: string;
       profile: StudentProfile;
     }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async forgotPassword(email: string) {
+    return this.request<void>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async resetPassword(body: { email: string; otp: string; newPassword: string }) {
+    return this.request<void>('/auth/reset-password', {
       method: 'POST',
       body: JSON.stringify(body),
     });

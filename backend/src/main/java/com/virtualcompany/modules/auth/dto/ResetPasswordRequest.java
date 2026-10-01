@@ -12,16 +12,17 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class RegisterRequest {
-
-    @NotBlank(message = "Name is required")
-    @Size(min = 2, max = 150, message = "Name must be between 2 and 150 characters")
-    private String name;
+public class ResetPasswordRequest {
 
     @NotBlank(message = "Email is required")
     @Email(message = "Please provide a valid email address")
     private String email;
 
-    // Optional: if not provided, backend automatically generates a secure password and emails it
-    private String password;
+    @NotBlank(message = "OTP is required")
+    @Size(min = 6, max = 6, message = "OTP must be exactly 6 digits")
+    private String otp;
+
+    @NotBlank(message = "New password is required")
+    @Size(min = 6, message = "New password must be at least 6 characters")
+    private String newPassword;
 }

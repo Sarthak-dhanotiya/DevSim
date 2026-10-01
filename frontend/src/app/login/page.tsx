@@ -66,9 +66,17 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Password
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Password
+                </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-[11px] text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                >
+                  Forgot Password?
+                </Link>
+              </div>
               <input
                 type="password"
                 required
@@ -89,11 +97,18 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500">
-            Don&apos;t have an account?{' '}
-            <Link href="/register" className="text-slate-900 dark:text-white font-medium hover:underline">
-              Register
-            </Link>
+          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500 space-y-2">
+            <div>
+              Don&apos;t have an account?{' '}
+              <Link href="/register" className="text-slate-900 dark:text-white font-medium hover:underline">
+                Register
+              </Link>
+            </div>
+            <div>
+              <Link href="/forgot-password" className="text-[11px] text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
+                Forgot your password? Click here
+              </Link>
+            </div>
           </div>
         </div>
       </div>

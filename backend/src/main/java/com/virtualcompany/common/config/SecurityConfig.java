@@ -60,7 +60,7 @@ public class SecurityConfig {
                         ).permitAll()
 
                         // Public Auth endpoints
-                        .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login").permitAll()
+                        .requestMatchers("/api/v1/auth/**").permitAll()
 
                         // Public Catalogue queries
                         .requestMatchers(HttpMethod.GET, "/api/v1/career-tracks/**").permitAll()
