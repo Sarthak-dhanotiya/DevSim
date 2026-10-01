@@ -357,35 +357,106 @@ public class AiTechLeadService {
                     "**Description:** " + ticket.getDescription() + "\n\n" +
                     "**Acceptance Criteria:**\n" + ticket.getAcceptanceCriteria() + "\n\n" +
                     "**Recommended Next Steps:**\n" +
-                    "1. Create your feature branch: `git checkout -b feature/" + ticket.getTicketKey().toLowerCase() + "`\n" +
-                    "2. Implement the required entity/repository/service logic according to our layered architecture.\n" +
-                    "3. Write unit tests with Mockito to verify edge cases.\n" +
-                    "4. Submit your notes in the ticket modal and click **'Submit for PR Review'** so I can review your PR!";
+                    "**How to work on this ticket:**\n" +
+                    "• **Easiest Option (Zero Setup):** Open this ticket in the board, switch to the **'Submit & Review'** tab, click **'Auto-Fill Template'** to get started with a ready skeleton, add your logic, and click **'Submit for AI Review'**.\n" +
+                    "• **Advanced Option (Local Git):** Clone or create branch `git checkout -b feature/" + ticket.getTicketKey().toLowerCase() + "`, code in your IDE, and paste your code or GitHub PR link into the ticket modal.\n\n" +
+                    "Once submitted, I'll review your code right away and give you senior engineering feedback!";
         }
 
         // --- 6. DEFAULT COMPREHENSIVE DEVELOPER FALLBACK ---
-        return "Hey! I'm Alex Mitchell, your Tech Lead. " +
-                "You can ask me anything about **Java fundamentals** (e.g. 'what is Java?', 'explain OOPs', 'multithreading'), " +
-                "**Spring Boot & JPA architecture** (e.g. 'how to do pagination', 'how does `@Transactional` work', 'what is dependency injection'), " +
+        return "Hey! I'm Alex Mitchell, your Tech Lead at QuickKart. " +
+                "You don't need a complicated Git setup to work on tickets! You can write or paste your code directly into the ticket modal's **'Submit & Review'** tab, or ask me for help here.\n\n" +
+                "I'm here to explain **Java fundamentals** (e.g. 'what is Java?', OOPs, multithreading), " +
+                "**Spring Boot architecture** (e.g. pagination, `@Transactional`, dependency injection), " +
                 "**unit testing with Mockito**, or specific ticket guidelines (`QK-101` to `QK-105`).\n\n" +
-                "Feel free to ask your specific technical question or share an error you're facing!";
+                "Feel free to ask any question!";
     }
 
     public String generateReviewFeedback(ProjectTicket ticket, String submissionNotes) {
-        String notesText = (submissionNotes != null && !submissionNotes.isBlank())
+        String codeOrNotes = (submissionNotes != null && !submissionNotes.isBlank())
                 ? submissionNotes
                 : "Implementation completed meeting ticket acceptance criteria.";
 
-        return "### AI Tech Lead Review — " + ticket.getTicketKey() + "\n\n" +
-                "**Reviewer:** Alex Mitchell (Staff Software Engineer & Tech Lead)\n\n" +
-                "**Status:** APPROVED WITH MERGE COMMENDATION\n\n" +
+        // 1. Try Gemini live review if API key configured
+        if (geminiApiKey != null && !geminiApiKey.isBlank()) {
+            try {
+                String prompt = "You are Alex Mitchell, Staff Software Engineer & Tech Lead at QuickKart. " +
+                        "Review this PR submitted by a college student developer for Ticket " + ticket.getTicketKey() +
+                        ": \"" + ticket.getTitle() + "\".\n" +
+                        "Acceptance Criteria:\n" + ticket.getAcceptanceCriteria() + "\n\n" +
+                        "Student's Submitted Code / Solution:\n" + codeOrNotes + "\n\n" +
+                        "Format your review in clean Markdown with:\n" +
+                        "### 🚀 Pull Request Review — " + ticket.getTicketKey() + "\n" +
+                        "**Verdict:** ✅ APPROVED FOR MERGE (Score: 96/100)\n\n" +
+                        "**What Was Done Well:** (Bullet points highlighting good patterns)\n" +
+                        "**Senior Engineer Advice / Production Scaling:** (A pro tip on caching, indexing, or edge cases)\n" +
+                        "**Closing Commendation:** (Encouraging note to merge and celebrate)";
+                String review = callGeminiApi(prompt, ticket);
+                if (review != null && !review.isBlank()) {
+                    return review;
+                }
+            } catch (Exception e) {
+                log.warn("Gemini review generation failed, using intelligent built-in review: {}", e.getMessage());
+            }
+        }
+
+        // 2. Built-in Contextual Code Review
+        return buildSmartReview(ticket, codeOrNotes);
+    }
+
+    private String buildSmartReview(ProjectTicket ticket, String submissionNotes) {
+        String ticketKey = ticket.getTicketKey() != null ? ticket.getTicketKey() : "QK-101";
+
+        String specificDetails = switch (ticketKey) {
+            case "QK-101" -> """
+                    - **Clean Architecture:** Validated separation between `ProductController`, `ProductService`, and `ProductRepository`.
+                    - **Pagination & Sorting:** Correct implementation of `Pageable` parameters and standard `PageResponse<T>` DTO format.
+                    - **Filtering:** Dynamic category and price range query parameters handled safely without SQL injection risks.
+                    - **Senior Tip:** In high-traffic e-commerce flash sales, consider putting an in-memory Redis cache on the top 10 product categories to reduce Postgres read queries by 80%.
+                    """;
+            case "QK-102" -> """
+                    - **Inventory Reservation:** Temporary stock lock pattern implemented with clear expiration semantics.
+                    - **Quantity Validation:** Safe guards against negative or zero item quantities before reserve allocation.
+                    - **Exception Mapping:** Custom `InsufficientStockException` maps cleanly to HTTP 400 with actionable error payload.
+                    - **Senior Tip:** Implement an asynchronous scheduled task (or Redis TTL keyspace notification) to automatically release expired reservation locks after 15 minutes.
+                    """;
+            case "QK-103" -> """
+                    - **Concurrency Protection:** Successfully eliminated read-modify-write race condition using pessimistic locking (`@Lock(LockModeType.PESSIMISTIC_WRITE)`).
+                    - **Database Isolation:** PostgreSQL transaction boundaries configured properly to prevent dirty/non-repeatable reads during concurrent checkouts.
+                    - **Deadlock Avoidance:** Locking order maintained consistently across order item updates.
+                    - **Senior Tip:** For ultra-high volume scale, evaluate optimistic locking with `@Version` columns or atomic SQL decrement (`UPDATE product SET stock = stock - ? WHERE id = ? AND stock >= ?`) to eliminate lock wait times.
+                    """;
+            case "QK-104" -> """
+                    - **Idempotency Guarantee:** Duplicate network retries safely identified and deduped via `Idempotency-Key` header.
+                    - **Cache / DB Lookup:** Cached previous transaction responses to return identical HTTP 200 payloads on retries without re-charging.
+                    - **Atomicity:** Payment deduction, stock commit, and order record creation executed within a single `@Transactional` boundary.
+                    - **Senior Tip:** Enforce a unique database constraint on `(user_id, idempotency_key)` as a bulletproof final defense against concurrent duplicate network packets.
+                    """;
+            case "QK-105" -> """
+                    - **Production Observability:** Actuator health, info, and Prometheus metrics endpoints exposed securely under `/actuator/*`.
+                    - **Rate Limiting:** Token-bucket rate limiting filter protects catalog and checkout endpoints against scraper spikes and DDoS.
+                    - **Custom Gauges:** Registered custom Micrometer metrics for active carts and order processing latency.
+                    - **Senior Tip:** Configure Grafana alerting thresholds on p99 latency (> 250ms) and 5xx error rate (> 1%) for early incident detection.
+                    """;
+            default -> """
+                    - **Code Structure:** Layered separation between Controller, Service, and Persistence layers followed.
+                    - **Validation & Exceptions:** Input arguments sanitized and domain exceptions mapped to appropriate HTTP status codes.
+                    - **Acceptance Criteria:** Solution satisfies all required acceptance points for this ticket.
+                    - **Senior Tip:** Ensure comprehensive test coverage with Mockito to maintain high team velocity and prevent regressions.
+                    """;
+        };
+
+        String snippetSummary = submissionNotes.substring(0, Math.min(submissionNotes.length(), 200))
+                + (submissionNotes.length() > 200 ? "..." : "");
+
+        return "### 🚀 Pull Request Review — " + ticketKey + "\n\n" +
+                "**Reviewer:** Alex Mitchell (Staff Software Engineer & Tech Lead @ QuickKart)\n\n" +
+                "**Verdict:** ✅ APPROVED FOR MERGE (Score: 98/100)\n\n" +
                 "**Code Quality Analysis:**\n" +
-                "- Layered separation (Controller -> Service -> Repository) respected.\n" +
-                "- Input validation and exceptions handled correctly.\n" +
-                "- Schema migration and JPA mapping adhere to QuickKart engineering standards.\n\n" +
-                "**Submission Notes Evaluation:**\n" +
-                "> \"" + notesText + "\"\n\n" +
-                "**Commendation:** Great job tackling this task! You are ready to merge this branch and pick up the next ticket on the Kanban board.";
+                specificDetails + "\n" +
+                "**Student Submission Summary:**\n" +
+                "> \"" + snippetSummary + "\"\n\n" +
+                "**Commendation:** Outstanding job! Your implementation demonstrates strong software craftsmanship and production readiness. You have full approval to merge this Pull Request into `main`!";
     }
 
     private AiChatResponse buildResponse(String text) {

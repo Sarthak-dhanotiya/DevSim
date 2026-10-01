@@ -32,6 +32,13 @@ import {
   Layers,
   ChevronRight,
   Terminal,
+  Code2,
+  Lightbulb,
+  Play,
+  Rocket,
+  GitPullRequest,
+  ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 
 export default function WorkspacePage() {
@@ -41,6 +48,130 @@ export default function WorkspacePage() {
     </AuthGuard>
   );
 }
+
+interface StarterTemplate {
+  filename: string;
+  guide: string;
+  skeleton: string;
+}
+
+const STARTER_TEMPLATES: Record<string, StarterTemplate> = {
+  'QK-101': {
+    filename: 'ProductController.java',
+    guide: 'Implement the product catalog API with pagination and filters for category, minPrice, and maxPrice.',
+    skeleton: `@RestController
+@RequestMapping("/api/v1/catalog/products")
+@RequiredArgsConstructor
+public class ProductController {
+
+    private final ProductService productService;
+
+    @GetMapping
+    public ResponseEntity<PageResponse<ProductDto>> getProducts(
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @PageableDefault(page = 0, size = 20, sort = "price") Pageable pageable
+    ) {
+        PageResponse<ProductDto> products = productService.findProducts(categoryId, minPrice, maxPrice, pageable);
+        return ResponseEntity.ok(products);
+    }
+}`,
+  },
+  'QK-102': {
+    filename: 'CartService.java',
+    guide: 'Validate stock availability and hold a 15-minute temporary inventory reservation during checkout.',
+    skeleton: `@Service
+@RequiredArgsConstructor
+public class CartService {
+
+    private final InventoryRepository inventoryRepo;
+
+    @Transactional
+    public CartItemResponse addItemToCart(String userId, Long productId, int quantity) {
+        Inventory stock = inventoryRepo.findByProductId(productId)
+                .orElseThrow(() -> new InsufficientStockException("Product out of stock"));
+
+        if (stock.getAvailableQuantity() < quantity) {
+            throw new InsufficientStockException("Requested quantity exceeds available stock");
+        }
+
+        // Temporary 15-minute hold on inventory
+        stock.reserve(quantity, Duration.ofMinutes(15));
+        inventoryRepo.save(stock);
+
+        return CartItemResponse.builder()
+                .productId(productId)
+                .reservedQuantity(quantity)
+                .expiresAt(Instant.now().plus(15, ChronoUnit.MINUTES))
+                .build();
+    }
+}`,
+  },
+  'QK-103': {
+    filename: 'ProductRepository.java',
+    guide: 'Use pessimistic write locking (@Lock(LockModeType.PESSIMISTIC_WRITE)) to eliminate flash-sale race conditions.',
+    skeleton: `public interface ProductRepository extends JpaRepository<Product, Long> {
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Product p WHERE p.id = :id")
+    Optional<Product> findByIdWithPessimisticLock(@Param("id") Long id);
+
+    @Modifying
+    @Query("UPDATE Product p SET p.stock = p.stock - :qty WHERE p.id = :id AND p.stock >= :qty")
+    int decrementStockSafely(@Param("id") Long id, @Param("qty") int qty);
+}`,
+  },
+  'QK-104': {
+    filename: 'OrderController.java',
+    guide: 'Implement idempotency key header checking to prevent duplicate charge & order submissions on network retries.',
+    skeleton: `@RestController
+@RequestMapping("/api/v1/orders")
+@RequiredArgsConstructor
+public class OrderController {
+
+    private final OrderService orderService;
+    private final IdempotencyService idempotencyService;
+
+    @PostMapping
+    public ResponseEntity<OrderResponse> placeOrder(
+            @RequestHeader(value = "Idempotency-Key") String idempotencyKey,
+            @Valid @RequestBody CreateOrderRequest request
+    ) {
+        if (idempotencyService.hasKey(idempotencyKey)) {
+            return ResponseEntity.ok(idempotencyService.getCachedResponse(idempotencyKey));
+        }
+
+        OrderResponse order = orderService.createOrder(request);
+        idempotencyService.save(idempotencyKey, order);
+        return ResponseEntity.status(HttpStatus.CREATED).body(order);
+    }
+}`,
+  },
+  'QK-105': {
+    filename: 'RateLimitingFilter.java',
+    guide: 'Implement token bucket rate limiting filter to protect endpoints from automated scraping.',
+    skeleton: `@Component
+public class RateLimitingFilter extends OncePerRequestFilter {
+
+    private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+        String clientIp = request.getRemoteAddr();
+        Bucket bucket = buckets.computeIfAbsent(clientIp, k -> createNewBucket());
+
+        if (bucket.tryConsume(1)) {
+            filterChain.doFilter(request, response);
+        } else {
+            response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+            response.getWriter().write("{\\"error\\": \\"Rate limit exceeded (10 req/min)\\"}");
+        }
+    }
+}`,
+  },
+};
 
 const COLUMNS: { id: TicketStatus; label: string; countColor: string }[] = [
   { id: 'TODO', label: 'To Do', countColor: 'text-slate-500 bg-slate-100 dark:bg-slate-800' },
@@ -58,7 +189,12 @@ function WorkspaceContent() {
   const [loading, setLoading] = useState(true);
   const [selectedTicket, setSelectedTicket] = useState<ProjectTicket | null>(null);
   const [submissionNotes, setSubmissionNotes] = useState('');
+  const [codeSnippet, setCodeSnippet] = useState('');
+  const [githubPrUrl, setGithubPrUrl] = useState('');
+  const [submissionMode, setSubmissionMode] = useState<'code' | 'github'>('code');
+  const [modalTab, setModalTab] = useState<'overview' | 'guide' | 'submit'>('overview');
   const [copiedBranch, setCopiedBranch] = useState(false);
+  const [copiedTemplate, setCopiedTemplate] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // AI Tech Lead Chat Drawer State
@@ -102,13 +238,21 @@ function WorkspaceContent() {
     }
   }
 
-  async function handleStatusChange(ticket: ProjectTicket, newStatus: TicketStatus) {
+  async function handleStatusChange(
+    ticket: ProjectTicket,
+    newStatus: TicketStatus,
+    overrideNotes?: string
+  ) {
     if (!workspace) return;
     try {
       setIsUpdatingStatus(true);
+      const notesToSend = overrideNotes !== undefined 
+        ? overrideNotes 
+        : (submissionNotes || ticket.submissionNotes || undefined);
+
       const res = await api.updateTicketStatus(workspace.enrollmentId, ticket.id, {
         status: newStatus,
-        submissionNotes: submissionNotes || ticket.submissionNotes || undefined,
+        submissionNotes: notesToSend,
       });
 
       // Update state locally
@@ -128,11 +272,28 @@ function WorkspaceContent() {
       });
 
       setSelectedTicket(res.data);
+      if (newStatus === 'IN_REVIEW' || newStatus === 'DONE') {
+        setModalTab('submit');
+      }
     } catch (err) {
       console.error('Failed to update ticket status:', err);
       alert('Failed to update ticket status. Please try again.');
     } finally {
       setIsUpdatingStatus(false);
+    }
+  }
+
+  function openTicketModal(ticket: ProjectTicket) {
+    setSelectedTicket(ticket);
+    setSubmissionNotes(ticket.submissionNotes || '');
+    const template = STARTER_TEMPLATES[ticket.ticketKey];
+    if (template) {
+      setCodeSnippet(template.skeleton);
+    }
+    if (ticket.status === 'IN_REVIEW' || ticket.status === 'DONE') {
+      setModalTab('submit');
+    } else {
+      setModalTab('overview');
     }
   }
 
@@ -312,10 +473,7 @@ function WorkspaceContent() {
                   colTickets.map((ticket) => (
                     <div
                       key={ticket.id}
-                      onClick={() => {
-                        setSelectedTicket(ticket);
-                        setSubmissionNotes(ticket.submissionNotes || '');
-                      }}
+                      onClick={() => openTicketModal(ticket)}
                       className="p-3.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-400 dark:hover:border-slate-600 transition-colors cursor-pointer shadow-none space-y-2.5"
                     >
                       {/* Ticket Key & Priority */}
@@ -350,107 +508,410 @@ function WorkspaceContent() {
 
       {/* 3. TICKET DETAIL MODAL */}
       {selectedTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl max-w-3xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
             {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+            <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-950/40">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
                   {selectedTicket.ticketKey}
                 </span>
                 <PriorityBadge priority={selectedTicket.priority} />
-                <span className="text-xs text-slate-400 capitalize">
+                <span className="text-xs px-2 py-0.5 rounded font-medium bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 capitalize">
                   {selectedTicket.ticketType.toLowerCase()}
+                </span>
+                <span className="text-xs text-slate-500 flex items-center gap-1 font-mono">
+                  <Clock className="w-3 h-3" /> ~{selectedTicket.estimatedHours}h
                 </span>
               </div>
 
               <button
                 onClick={() => setSelectedTicket(null)}
-                className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
+            {/* Title Bar */}
+            <div className="px-5 pt-4 pb-2">
+              <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug">
+                {selectedTicket.title}
+              </h3>
+            </div>
+
+            {/* Interactive Tab Navigation */}
+            <div className="px-5 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 text-xs font-medium">
+              <button
+                onClick={() => setModalTab('overview')}
+                className={`py-2.5 px-3 border-b-2 flex items-center gap-1.5 transition-colors ${
+                  modalTab === 'overview'
+                    ? 'border-slate-900 text-slate-900 dark:border-white dark:text-white font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <FileCode className="w-3.5 h-3.5" />
+                <span>1. Requirements</span>
+              </button>
+
+              <button
+                onClick={() => setModalTab('guide')}
+                className={`py-2.5 px-3 border-b-2 flex items-center gap-1.5 transition-colors ${
+                  modalTab === 'guide'
+                    ? 'border-slate-900 text-slate-900 dark:border-white dark:text-white font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
+                <span>2. Starter Guide & Code</span>
+              </button>
+
+              <button
+                onClick={() => setModalTab('submit')}
+                className={`py-2.5 px-3 border-b-2 flex items-center gap-1.5 transition-colors relative ${
+                  modalTab === 'submit'
+                    ? 'border-slate-900 text-slate-900 dark:border-white dark:text-white font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-200'
+                }`}
+              >
+                <Rocket className="w-3.5 h-3.5 text-blue-500" />
+                <span>3. Submit & AI Review</span>
+                {selectedTicket.status === 'IN_REVIEW' && (
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                )}
+                {selectedTicket.status === 'DONE' && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                )}
+              </button>
+            </div>
+
             {/* Modal Body */}
-            <div className="p-5 overflow-y-auto space-y-5 text-xs sm:text-sm">
-              <div>
-                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                  {selectedTicket.title}
-                </h3>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  {selectedTicket.description}
-                </p>
-              </div>
-
-              {/* Acceptance Criteria */}
-              <div className="p-4 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 space-y-2">
-                <span className="font-semibold text-xs text-slate-900 dark:text-white uppercase tracking-wider block">
-                  Acceptance Criteria
-                </span>
-                <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line font-mono bg-white dark:bg-slate-950 p-3 rounded border border-slate-200 dark:border-slate-800">
-                  {selectedTicket.acceptanceCriteria}
-                </div>
-              </div>
-
-              {/* Git Branch Command */}
-              <div className="p-3.5 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <Terminal className="w-3.5 h-3.5" /> Simulated Git Branch Command
-                  </span>
-                  <button
-                    onClick={() => copyBranchCommand(selectedTicket.ticketKey)}
-                    className="text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center gap-1"
-                  >
-                    {copiedBranch ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-500" /> Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" /> Copy Command
-                      </>
-                    )}
-                  </button>
-                </div>
-                <div className="font-mono text-xs text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-900 p-2 rounded select-all">
-                  git checkout -b feature/{selectedTicket.ticketKey.toLowerCase()}-{workspace.project?.slug || 'task'}
-                </div>
-              </div>
-
-              {/* Submission Notes / PR Comments */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Implementation Notes / Pull Request Description
-                </label>
-                <textarea
-                  rows={3}
-                  value={submissionNotes}
-                  onChange={(e) => setSubmissionNotes(e.target.value)}
-                  placeholder="Describe your solution (e.g. Created ProductController with @Validated, added GlobalExceptionHandler, wrote 4 JUnit tests)..."
-                  className="w-full text-xs p-2.5 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-white"
-                />
-              </div>
-
-              {/* AI Tech Lead Review Feedback (if available) */}
-              {selectedTicket.aiReviewFeedback && (
-                <div className="p-4 rounded border border-blue-200 dark:border-blue-900/60 bg-blue-50/60 dark:bg-blue-950/30 space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-blue-900 dark:text-blue-300">
-                    <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span>Tech Lead PR Review (Alex Mitchell)</span>
+            <div className="p-5 overflow-y-auto space-y-4 flex-1 text-xs sm:text-sm">
+              {/* TAB 1: REQUIREMENTS */}
+              {modalTab === 'overview' && (
+                <div className="space-y-4">
+                  {/* Business Goal Description */}
+                  <div className="p-3.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-1">
+                      Business Goal & Description
+                    </span>
+                    <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                      {selectedTicket.description}
+                    </p>
                   </div>
-                  <p className="text-xs text-blue-950 dark:text-blue-200 leading-relaxed whitespace-pre-line">
-                    {selectedTicket.aiReviewFeedback}
-                  </p>
+
+                  {/* Acceptance Criteria Checklist */}
+                  <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Acceptance Criteria (Must Pass)
+                      </span>
+                      <span className="text-[11px] text-slate-400">All points reviewed by AI Tech Lead</span>
+                    </div>
+
+                    <div className="space-y-2 pt-1">
+                      {selectedTicket.acceptanceCriteria.split('\n').filter(Boolean).map((line, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-start gap-2.5 p-2 rounded bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800/80 text-xs text-slate-700 dark:text-slate-300"
+                        >
+                          <span className="mt-0.5 w-4 h-4 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-[10px] shrink-0">
+                            {idx + 1}
+                          </span>
+                          <span className="leading-relaxed">{line.replace(/^-\s*/, '')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Local Git Branch Info (Optional for Git users) */}
+                  <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                        <Terminal className="w-3.5 h-3.5 text-slate-500" />
+                        Optional: Simulated Git Branch Command
+                      </span>
+                      <button
+                        onClick={() => copyBranchCommand(selectedTicket.ticketKey)}
+                        className="text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white flex items-center gap-1"
+                      >
+                        {copiedBranch ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-500" /> Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" /> Copy
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <div className="font-mono text-[11px] text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-800 select-all">
+                      git checkout -b feature/{selectedTicket.ticketKey.toLowerCase()}-{workspace.project?.slug || 'task'}
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      💡 <em>Zero-setup tip: You do not need to run Git locally. You can inspect the starter code in Tab 2 and submit your solution directly in Tab 3!</em>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: STARTER GUIDE & CODE SKELETON */}
+              {modalTab === 'guide' && (
+                <div className="space-y-4">
+                  {STARTER_TEMPLATES[selectedTicket.ticketKey] ? (
+                    <>
+                      <div className="p-3.5 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 space-y-1.5">
+                        <span className="font-bold text-xs text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                          <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                          Engineering Guidance from Alex Mitchell
+                        </span>
+                        <p className="text-xs text-amber-950 dark:text-amber-200 leading-relaxed">
+                          {STARTER_TEMPLATES[selectedTicket.ticketKey].guide}
+                        </p>
+                      </div>
+
+                      {/* Code Block */}
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-950 text-slate-200 font-mono text-xs">
+                        <div className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Code2 className="w-4 h-4 text-blue-400" />
+                            <span className="font-bold text-slate-300 text-xs">
+                              {STARTER_TEMPLATES[selectedTicket.ticketKey].filename}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(STARTER_TEMPLATES[selectedTicket.ticketKey].skeleton);
+                                setCopiedTemplate(true);
+                                setTimeout(() => setCopiedTemplate(false), 2000);
+                              }}
+                              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] flex items-center gap-1 transition-colors"
+                            >
+                              {copiedTemplate ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                              <span>{copiedTemplate ? 'Copied' : 'Copy Skeleton'}</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setCodeSnippet(STARTER_TEMPLATES[selectedTicket.ticketKey].skeleton);
+                                setModalTab('submit');
+                              }}
+                              className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-[11px] flex items-center gap-1 transition-colors"
+                            >
+                              <Rocket className="w-3 h-3" />
+                              <span>Use in Submit Tab &rarr;</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        <pre className="p-4 overflow-x-auto text-[11px] leading-relaxed text-slate-300 font-mono">
+                          {STARTER_TEMPLATES[selectedTicket.ticketKey].skeleton}
+                        </pre>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-6 text-center text-xs text-slate-500">
+                      Starter template available directly in the chat with Alex!
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: SUBMIT SOLUTION & AI REVIEW */}
+              {modalTab === 'submit' && (
+                <div className="space-y-4">
+                  {/* Status Banner */}
+                  {selectedTicket.status === 'DONE' && (
+                    <div className="p-4 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                        ✓
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                          Ticket Merged & Completed!
+                        </h4>
+                        <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">
+                          Alex Mitchell approved your Pull Request and merged it into main. Sprint progress updated!
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* AI Tech Lead Review Card (Visible when IN_REVIEW or DONE) */}
+                  {selectedTicket.aiReviewFeedback && (
+                    <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/20 space-y-3">
+                      <div className="flex items-center justify-between border-b border-blue-200 dark:border-blue-900/40 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs">
+                            AM
+                          </div>
+                          <div>
+                            <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                              Alex Mitchell
+                            </span>
+                            <span className="text-[11px] text-slate-500">
+                              Staff Software Engineer & Tech Lead @ QuickKart
+                            </span>
+                          </div>
+                        </div>
+
+                        <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Approved
+                        </span>
+                      </div>
+
+                      <div className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line bg-white/80 dark:bg-slate-900/80 p-3.5 rounded-lg border border-blue-100 dark:border-blue-900/40">
+                        {selectedTicket.aiReviewFeedback}
+                      </div>
+
+                      {selectedTicket.status === 'IN_REVIEW' && (
+                        <div className="pt-2 flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            disabled={isUpdatingStatus}
+                            onClick={() => handleStatusChange(selectedTicket, 'DONE')}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5"
+                          >
+                            <Check className="w-4 h-4" />
+                            <span>Approve & Merge to Main (Done)</span>
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Submission Form (When TODO or IN_PROGRESS or revising) */}
+                  {selectedTicket.status !== 'DONE' && (
+                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <Rocket className="w-4 h-4 text-blue-500" />
+                          <span className="font-bold text-xs text-slate-900 dark:text-white">
+                            Submit Your Solution for Tech Lead PR Review
+                          </span>
+                        </div>
+
+                        {/* Submission Mode Toggle */}
+                        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-[11px]">
+                          <button
+                            type="button"
+                            onClick={() => setSubmissionMode('code')}
+                            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                              submissionMode === 'code'
+                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                          >
+                            💻 In-Browser Code
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSubmissionMode('github')}
+                            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                              submissionMode === 'github'
+                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                          >
+                            🔗 GitHub PR Link
+                          </button>
+                        </div>
+                      </div>
+
+                      {submissionMode === 'code' ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">
+                              Your Java / Spring Boot Implementation
+                            </span>
+                            {STARTER_TEMPLATES[selectedTicket.ticketKey] && (
+                              <button
+                                type="button"
+                                onClick={() => setCodeSnippet(STARTER_TEMPLATES[selectedTicket.ticketKey].skeleton)}
+                                className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
+                              >
+                                <Sparkles className="w-3 h-3 text-amber-500" />
+                                <span>Auto-Fill Starter Code</span>
+                              </button>
+                            )}
+                          </div>
+
+                          <textarea
+                            rows={8}
+                            value={codeSnippet}
+                            onChange={(e) => setCodeSnippet(e.target.value)}
+                            placeholder="// Write or paste your implementation code here..."
+                            className="w-full text-xs font-mono p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-950 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 leading-relaxed resize-y"
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            GitHub Pull Request / Commit URL
+                          </label>
+                          <input
+                            type="url"
+                            value={githubPrUrl}
+                            onChange={(e) => setGithubPrUrl(e.target.value)}
+                            placeholder="https://github.com/your-username/quickkart-backend/pull/1"
+                            className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                      )}
+
+                      {/* Developer Notes / Description */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          PR Description / Solution Summary
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={submissionNotes}
+                          onChange={(e) => setSubmissionNotes(e.target.value)}
+                          placeholder="e.g. Implemented ProductController with category filtering, added Pageable pagination, and verified edge cases."
+                          className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      {/* Submit Button */}
+                      <div className="pt-1 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-400">
+                          Instant AI code review will be generated by Alex Mitchell
+                        </span>
+
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          disabled={isUpdatingStatus}
+                          onClick={() => {
+                            const combined = submissionMode === 'code'
+                              ? `Code Snippet:\n${codeSnippet}\n\nDeveloper Notes:\n${submissionNotes}`
+                              : `GitHub PR URL: ${githubPrUrl}\n\nDeveloper Notes:\n${submissionNotes}`;
+                            handleStatusChange(selectedTicket, 'IN_REVIEW', combined);
+                          }}
+                          className="flex items-center gap-1.5"
+                        >
+                          <Rocket className="w-3.5 h-3.5" />
+                          <span>Submit for AI Tech Lead Review</span>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Modal Footer / Actions */}
-            <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex flex-wrap items-center justify-between gap-3">
-              <div className="text-xs text-slate-500">
-                Current Status: <strong className="text-slate-900 dark:text-white">{selectedTicket.status}</strong>
+            {/* Modal Footer */}
+            <div className="p-3.5 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <span>Status:</span>
+                <span className="font-bold text-slate-900 dark:text-white font-mono uppercase">
+                  {selectedTicket.status}
+                </span>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -459,31 +920,14 @@ function WorkspaceContent() {
                     size="sm"
                     variant="primary"
                     disabled={isUpdatingStatus}
-                    onClick={() => handleStatusChange(selectedTicket, 'IN_PROGRESS')}
+                    onClick={() => {
+                      handleStatusChange(selectedTicket, 'IN_PROGRESS');
+                      setModalTab('submit');
+                    }}
+                    className="flex items-center gap-1.5"
                   >
-                    Start Ticket (In Progress)
-                  </Button>
-                )}
-
-                {selectedTicket.status === 'IN_PROGRESS' && (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    disabled={isUpdatingStatus}
-                    onClick={() => handleStatusChange(selectedTicket, 'IN_REVIEW')}
-                  >
-                    Submit for PR Review
-                  </Button>
-                )}
-
-                {selectedTicket.status === 'IN_REVIEW' && (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    disabled={isUpdatingStatus}
-                    onClick={() => handleStatusChange(selectedTicket, 'DONE')}
-                  >
-                    Approve & Merge (Done)
+                    <Play className="w-3.5 h-3.5" />
+                    <span>Start Ticket</span>
                   </Button>
                 )}
 
@@ -493,8 +937,10 @@ function WorkspaceContent() {
                     variant="outline"
                     disabled={isUpdatingStatus}
                     onClick={() => handleStatusChange(selectedTicket, 'IN_PROGRESS')}
+                    className="flex items-center gap-1.5 text-xs"
                   >
-                    Reopen Ticket
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Reopen Ticket</span>
                   </Button>
                 )}
 
@@ -505,8 +951,10 @@ function WorkspaceContent() {
                     setChatTicketId(selectedTicket.id);
                     setIsChatOpen(true);
                   }}
+                  className="flex items-center gap-1.5 text-xs border-slate-300 dark:border-slate-700"
                 >
-                  Ask Alex About Ticket
+                  <MessageSquare className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Ask Alex About Ticket</span>
                 </Button>
               </div>
             </div>
