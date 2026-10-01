@@ -4,7 +4,7 @@ server:
 
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:virtualcompany_db}?sslmode=${DB_SSL_MODE:require}}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME:virtualcompany_db}?sslmode=require}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
