@@ -8,11 +8,14 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -187,19 +190,27 @@ public class EmailService {
         });
     }
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Value("${app.mail.resend-from:${RESEND_FROM:}}")
+    private String resendFrom;
+
     private boolean sendViaResend(String toEmail, String subject, String htmlContent) {
         try {
-            String from = (mailFrom != null && !mailFrom.isBlank() && !mailFrom.contains("localhost"))
-                    ? mailFrom
-                    : "onboarding@resend.dev";
+            // Resend requires verified domain OR 'DevSim Platform <onboarding@resend.dev>'
+            // It rejects public domains like @gmail.com as the 'from' address
+            String from = (resendFrom != null && !resendFrom.isBlank())
+                    ? resendFrom.trim()
+                    : "DevSim Platform <onboarding@resend.dev>";
 
-            String escapedSubject = subject.replace("\"", "\\\"");
-            String escapedHtml = htmlContent.replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
-
-            String jsonPayload = String.format(
-                    "{\"from\":\"%s\",\"to\":[\"%s\"],\"subject\":\"%s\",\"html\":\"%s\"}",
-                    from, toEmail, escapedSubject, escapedHtml
+            Map<String, Object> payload = Map.of(
+                    "from", from,
+                    "to", List.of(toEmail),
+                    "subject", subject,
+                    "html", htmlContent
             );
+
+            String jsonPayload = objectMapper.writeValueAsString(payload);
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.resend.com/emails"))
