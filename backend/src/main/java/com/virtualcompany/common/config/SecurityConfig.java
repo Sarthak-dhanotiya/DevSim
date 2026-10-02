@@ -59,6 +59,9 @@ public class SecurityConfig {
                                 "/v3/api-docs.yaml"
                         ).permitAll()
 
+                        // Public Health & Root endpoints
+                        .requestMatchers("/", "/health", "/api/v1/health").permitAll()
+
                         // Public Auth endpoints
                         .requestMatchers("/api/v1/auth/**").permitAll()
 
