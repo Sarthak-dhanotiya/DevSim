@@ -17,6 +17,8 @@ import {
   Layers,
   Sun,
   Moon,
+  ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 
 export function Navbar() {
@@ -79,6 +81,19 @@ export function Navbar() {
                 }`}
               >
                 Workspace
+              </Link>
+            )}
+            {user && (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') && (
+              <Link
+                href="/super-admin"
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                  pathname.startsWith('/super-admin')
+                    ? 'text-indigo-400 bg-indigo-950/60 border border-indigo-500/40 shadow-[0_0_12px_rgba(99,102,241,0.2)]'
+                    : 'text-indigo-400/90 hover:text-indigo-200 hover:bg-indigo-950/40 border border-indigo-500/20'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Super Admin</span>
               </Link>
             )}
           </nav>

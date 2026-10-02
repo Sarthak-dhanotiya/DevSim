@@ -45,7 +45,18 @@ public class TicketService {
                 .orElseThrow(() -> new ResourceNotFoundException("Enrollment", "id", enrollmentId));
 
         UUID projectId = enrollment.getProject().getId();
-        List<ProjectTicket> projectTickets = ticketRepository.findByProjectIdOrderByOrderIndexAsc(projectId);
+        UUID userId = enrollment.getStudent().getUser() != null ? enrollment.getStudent().getUser().getId() : null;
+
+        List<ProjectTicket> projectTickets = new ArrayList<>();
+        if (userId != null) {
+            projectTickets = ticketRepository.findByProjectIdAndTargetUserIdOrderByOrderIndexAsc(projectId, userId);
+        }
+        if (projectTickets.isEmpty()) {
+            projectTickets = ticketRepository.findByProjectIdAndTargetUserIsNullOrderByOrderIndexAsc(projectId);
+        }
+        if (projectTickets.isEmpty()) {
+            projectTickets = ticketRepository.findByProjectIdOrderByOrderIndexAsc(projectId);
+        }
         List<StudentTicketProgress> existingProgress = progressRepository.findByEnrollmentId(enrollmentId);
 
         Map<UUID, StudentTicketProgress> progressMap = existingProgress.stream()

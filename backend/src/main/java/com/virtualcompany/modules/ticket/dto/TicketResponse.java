@@ -27,6 +27,9 @@ public class TicketResponse {
     private TicketPriority priority;
     private Integer estimatedHours;
     private Integer orderIndex;
+    private Boolean isAiGenerated;
+    private String difficultyLevel;
+    private UUID targetUserId;
 
     // Student's personal progress on this ticket
     private TicketStatus status;
@@ -47,6 +50,9 @@ public class TicketResponse {
                 .priority(ticket.getPriority())
                 .estimatedHours(ticket.getEstimatedHours())
                 .orderIndex(ticket.getOrderIndex())
+                .isAiGenerated(ticket.getIsAiGenerated())
+                .difficultyLevel(ticket.getDifficultyLevel())
+                .targetUserId(ticket.getTargetUser() != null ? ticket.getTargetUser().getId() : null)
                 .status(progress != null ? progress.getStatus() : TicketStatus.TODO);
 
         if (progress != null) {

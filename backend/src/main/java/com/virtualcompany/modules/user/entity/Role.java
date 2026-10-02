@@ -2,5 +2,6 @@ package com.virtualcompany.modules.user.entity;
 
 public enum Role {
     STUDENT,
-    ADMIN
+    ADMIN,
+    SUPER_ADMIN
 }

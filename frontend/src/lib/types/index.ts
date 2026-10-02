@@ -1,4 +1,4 @@
-export type Role = 'STUDENT' | 'ADMIN';
+export type Role = 'STUDENT' | 'ADMIN' | 'SUPER_ADMIN';
 
 export type ExperienceLevel = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
 
@@ -81,6 +81,9 @@ export interface ProjectTicket {
   priority: TicketPriority;
   estimatedHours: number;
   orderIndex: number;
+  isAiGenerated?: boolean;
+  difficultyLevel?: string;
+  targetUserId?: string;
   status: TicketStatus;
   branchName?: string;
   submissionNotes?: string;
@@ -121,4 +124,59 @@ export interface ErrorResponse {
   message: string;
   path: string;
   details?: string[];
+}
+
+export interface SuperAdminStats {
+  totalUsers: number;
+  totalStudents: number;
+  totalAdmins: number;
+  totalCompanies: number;
+  totalProjects: number;
+  totalEnrollments: number;
+  totalAiTicketsGenerated: number;
+}
+
+export interface SuperAdminUserItem {
+  userId: string;
+  email: string;
+  role: Role;
+  createdAt: string;
+  name: string;
+  collegeName?: string;
+  experienceLevel: string;
+  enrollmentId?: string;
+  assignedProjectId?: string;
+  assignedProjectName?: string;
+  assignedCompanyId?: string;
+  assignedCompanyName?: string;
+  enrollmentStatus: string;
+  completedTicketsCount: number;
+  totalTicketsCount: number;
+  hasPersonalizedAiTickets: boolean;
+}
+
+export interface AssignProjectPayload {
+  projectId: string;
+  autoGenerateAiTasks?: boolean;
+  difficultyLevel?: string;
+  focusArea?: string;
+}
+
+export interface GenerateAiTasksPayload {
+  userId: string;
+  projectId: string;
+  difficultyLevel?: string;
+  focusArea?: string;
+  taskCount?: number;
+}
+
+export interface CreateManualTicketPayload {
+  projectId: string;
+  targetUserId?: string;
+  title: string;
+  description: string;
+  acceptanceCriteria: string;
+  ticketType?: TicketType;
+  priority?: TicketPriority;
+  estimatedHours?: number;
 }

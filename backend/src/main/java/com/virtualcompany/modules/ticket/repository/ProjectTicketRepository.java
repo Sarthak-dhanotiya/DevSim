@@ -11,6 +11,10 @@ import java.util.UUID;
 @Repository
 public interface ProjectTicketRepository extends JpaRepository<ProjectTicket, UUID> {
     List<ProjectTicket> findByProjectIdOrderByOrderIndexAsc(UUID projectId);
+    List<ProjectTicket> findByProjectIdAndTargetUserIdOrderByOrderIndexAsc(UUID projectId, UUID targetUserId);
+    List<ProjectTicket> findByProjectIdAndTargetUserIsNullOrderByOrderIndexAsc(UUID projectId);
+    List<ProjectTicket> findByTargetUserIdOrderByOrderIndexAsc(UUID targetUserId);
     Optional<ProjectTicket> findByTicketKey(String ticketKey);
     boolean existsByTicketKey(String ticketKey);
+    long countByIsAiGeneratedTrue();
 }

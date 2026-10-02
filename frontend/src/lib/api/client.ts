@@ -9,6 +9,12 @@ import {
   WorkspaceData,
   TicketStatus,
   AiChatMessage,
+  SuperAdminStats,
+  SuperAdminUserItem,
+  AssignProjectPayload,
+  GenerateAiTasksPayload,
+  CreateManualTicketPayload,
+  Role,
 } from '../types';
 
 function getBaseUrl(): string {
@@ -212,6 +218,84 @@ class ApiClient {
 
   async chatWithTechLead(body: { ticketId?: string; message: string }) {
     return this.request<AiChatMessage>('/workspace/ai-chat', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  // --- SUPER ADMIN & DYNAMIC AI TASKS ---
+  async getSuperAdminStats() {
+    return this.request<SuperAdminStats>('/super-admin/stats');
+  }
+
+  async getSuperAdminUsers() {
+    return this.request<SuperAdminUserItem[]>('/super-admin/users');
+  }
+
+  async assignUserProject(userId: string, body: AssignProjectPayload) {
+    return this.request<SuperAdminUserItem>(`/super-admin/users/${userId}/assign-project`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async updateUserRole(userId: string, role: Role) {
+    return this.request<SuperAdminUserItem>(`/super-admin/users/${userId}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  async generateAiTasks(body: GenerateAiTasksPayload) {
+    return this.request<ProjectTicket[]>('/super-admin/tickets/generate-ai', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async getUserTickets(userId: string) {
+    return this.request<ProjectTicket[]>(`/super-admin/users/${userId}/tickets`);
+  }
+
+  async createCustomTicket(body: CreateManualTicketPayload) {
+    return this.request<ProjectTicket>('/super-admin/tickets', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async deleteTicket(ticketId: string) {
+    return this.request<void>(`/super-admin/tickets/${ticketId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async createCompany(body: {
+    name: string;
+    slug: string;
+    description: string;
+    industry: string;
+    companySize: string;
+    logoUrl?: string;
+  }) {
+    return this.request<VirtualCompany>('/admin/companies', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  async createProject(body: {
+    companyId: string;
+    careerTrackId: string;
+    name: string;
+    slug: string;
+    shortDescription: string;
+    description: string;
+    difficulty: string;
+    estimatedDuration: string;
+    technologyNames?: string[];
+  }) {
+    return this.request<Project>('/admin/projects', {
       method: 'POST',
       body: JSON.stringify(body),
     });

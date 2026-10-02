@@ -58,6 +58,18 @@ public class ProjectTicket {
     @Builder.Default
     private Integer orderIndex = 1;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "target_user_id")
+    private com.virtualcompany.modules.user.entity.User targetUser;
+
+    @Column(name = "is_ai_generated", nullable = false)
+    @Builder.Default
+    private Boolean isAiGenerated = false;
+
+    @Column(name = "difficulty_level", length = 30)
+    @Builder.Default
+    private String difficultyLevel = "MEDIUM";
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
