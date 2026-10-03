@@ -372,91 +372,310 @@ public class AiTechLeadService {
                 "Feel free to ask any question!";
     }
 
-    public String generateReviewFeedback(ProjectTicket ticket, String submissionNotes) {
-        String codeOrNotes = (submissionNotes != null && !submissionNotes.isBlank())
-                ? submissionNotes
-                : "Implementation completed meeting ticket acceptance criteria.";
+    public record CodeReviewResult(
+            boolean approved,
+            int score,
+            String verdictTitle,
+            String feedbackMarkdown
+    ) {}
 
-        // 1. Try Gemini live review if API key configured
+    public String generateReviewFeedback(ProjectTicket ticket, String submissionNotes) {
+        return evaluateSubmission(ticket, submissionNotes).feedbackMarkdown();
+    }
+
+    public CodeReviewResult evaluateSubmission(ProjectTicket ticket, String submissionNotes) {
+        // 1. Immediate validation: Check if submission is empty, trivial, or unmodified boilerplate
+        if (isSubmissionEmptyOrTrivial(submissionNotes)) {
+            return buildEmptySubmissionResult(ticket);
+        }
+
+        // 2. If Gemini API key is configured, perform live GenAI evaluation
         if (geminiApiKey != null && !geminiApiKey.isBlank()) {
             try {
-                String prompt = "You are Alex Mitchell, Staff Software Engineer & Tech Lead at QuickKart. " +
-                        "Review this PR submitted by a college student developer for Ticket " + ticket.getTicketKey() +
-                        ": \"" + ticket.getTitle() + "\".\n" +
-                        "Acceptance Criteria:\n" + ticket.getAcceptanceCriteria() + "\n\n" +
-                        "Student's Submitted Code / Solution:\n" + codeOrNotes + "\n\n" +
-                        "Format your review in clean Markdown with:\n" +
-                        "### 🚀 Pull Request Review — " + ticket.getTicketKey() + "\n" +
-                        "**Verdict:** ✅ APPROVED FOR MERGE (Score: 96/100)\n\n" +
-                        "**What Was Done Well:** (Bullet points highlighting good patterns)\n" +
-                        "**Senior Engineer Advice / Production Scaling:** (A pro tip on caching, indexing, or edge cases)\n" +
-                        "**Closing Commendation:** (Encouraging note to merge and celebrate)";
-                String review = callGeminiApi(prompt, ticket);
-                if (review != null && !review.isBlank()) {
-                    return review;
+                CodeReviewResult geminiResult = callGeminiReview(ticket, submissionNotes);
+                if (geminiResult != null) {
+                    return geminiResult;
                 }
             } catch (Exception e) {
-                log.warn("Gemini review generation failed, using intelligent built-in review: {}", e.getMessage());
+                log.warn("Gemini code review failed, falling back to smart built-in code analyzer: {}", e.getMessage());
             }
         }
 
-        // 2. Built-in Contextual Code Review
-        return buildSmartReview(ticket, codeOrNotes);
+        // 3. Fallback: Built-In Semantic & Heuristic Code Analyzer
+        return evaluateWithSmartCodeAnalyzer(ticket, submissionNotes);
     }
 
-    private String buildSmartReview(ProjectTicket ticket, String submissionNotes) {
-        String ticketKey = ticket.getTicketKey() != null ? ticket.getTicketKey() : "QK-101";
+    private boolean isSubmissionEmptyOrTrivial(String input) {
+        if (input == null || input.isBlank()) {
+            return true;
+        }
 
-        String specificDetails = switch (ticketKey) {
-            case "QK-101" -> """
-                    - **Clean Architecture:** Validated separation between `ProductController`, `ProductService`, and `ProductRepository`.
-                    - **Pagination & Sorting:** Correct implementation of `Pageable` parameters and standard `PageResponse<T>` DTO format.
-                    - **Filtering:** Dynamic category and price range query parameters handled safely without SQL injection risks.
-                    - **Senior Tip:** In high-traffic e-commerce flash sales, consider putting an in-memory Redis cache on the top 10 product categories to reduce Postgres read queries by 80%.
-                    """;
-            case "QK-102" -> """
-                    - **Inventory Reservation:** Temporary stock lock pattern implemented with clear expiration semantics.
-                    - **Quantity Validation:** Safe guards against negative or zero item quantities before reserve allocation.
-                    - **Exception Mapping:** Custom `InsufficientStockException` maps cleanly to HTTP 400 with actionable error payload.
-                    - **Senior Tip:** Implement an asynchronous scheduled task (or Redis TTL keyspace notification) to automatically release expired reservation locks after 15 minutes.
-                    """;
-            case "QK-103" -> """
-                    - **Concurrency Protection:** Successfully eliminated read-modify-write race condition using pessimistic locking (`@Lock(LockModeType.PESSIMISTIC_WRITE)`).
-                    - **Database Isolation:** PostgreSQL transaction boundaries configured properly to prevent dirty/non-repeatable reads during concurrent checkouts.
-                    - **Deadlock Avoidance:** Locking order maintained consistently across order item updates.
-                    - **Senior Tip:** For ultra-high volume scale, evaluate optimistic locking with `@Version` columns or atomic SQL decrement (`UPDATE product SET stock = stock - ? WHERE id = ? AND stock >= ?`) to eliminate lock wait times.
-                    """;
-            case "QK-104" -> """
-                    - **Idempotency Guarantee:** Duplicate network retries safely identified and deduped via `Idempotency-Key` header.
-                    - **Cache / DB Lookup:** Cached previous transaction responses to return identical HTTP 200 payloads on retries without re-charging.
-                    - **Atomicity:** Payment deduction, stock commit, and order record creation executed within a single `@Transactional` boundary.
-                    - **Senior Tip:** Enforce a unique database constraint on `(user_id, idempotency_key)` as a bulletproof final defense against concurrent duplicate network packets.
-                    """;
-            case "QK-105" -> """
-                    - **Production Observability:** Actuator health, info, and Prometheus metrics endpoints exposed securely under `/actuator/*`.
-                    - **Rate Limiting:** Token-bucket rate limiting filter protects catalog and checkout endpoints against scraper spikes and DDoS.
-                    - **Custom Gauges:** Registered custom Micrometer metrics for active carts and order processing latency.
-                    - **Senior Tip:** Configure Grafana alerting thresholds on p99 latency (> 250ms) and 5xx error rate (> 1%) for early incident detection.
-                    """;
-            default -> """
-                    - **Code Structure:** Layered separation between Controller, Service, and Persistence layers followed.
-                    - **Validation & Exceptions:** Input arguments sanitized and domain exceptions mapped to appropriate HTTP status codes.
-                    - **Acceptance Criteria:** Solution satisfies all required acceptance points for this ticket.
-                    - **Senior Tip:** Ensure comprehensive test coverage with Mockito to maintain high team velocity and prevent regressions.
-                    """;
-        };
+        // Strip known label prefixes and comment blocks
+        String cleaned = input
+                .replaceAll("(?i)code\\s*snippet\\s*:", "")
+                .replaceAll("(?i)developer\\s*notes\\s*:", "")
+                .replaceAll("(?i)github\\s*pr\\s*(url)?\\s*:", "")
+                .replaceAll("//.*", "") // remove single-line comments
+                .replaceAll("/\\*[\\s\\S]*?\\*/", "") // remove multi-line comments
+                .replaceAll("\\s+", ""); // remove all whitespace
 
-        String snippetSummary = submissionNotes.substring(0, Math.min(submissionNotes.length(), 200))
-                + (submissionNotes.length() > 200 ? "..." : "");
+        // If after stripping comments and labels there are fewer than 35 characters of real code
+        return cleaned.length() < 35;
+    }
 
-        return "### 🚀 Pull Request Review — " + ticketKey + "\n\n" +
+    private CodeReviewResult buildEmptySubmissionResult(ProjectTicket ticket) {
+        String ticketKey = ticket.getTicketKey() != null ? ticket.getTicketKey() : "TASK";
+        String criteria = ticket.getAcceptanceCriteria() != null ? ticket.getAcceptanceCriteria() : "Complete ticket requirements.";
+
+        StringBuilder checklist = new StringBuilder();
+        for (String line : criteria.split("\\r?\\n")) {
+            String trimmed = line.trim();
+            if (!trimmed.isEmpty()) {
+                checklist.append("- [ ] ").append(trimmed.replaceFirst("^[\\-*\\d.]+\\s*", "")).append("\n");
+            }
+        }
+
+        String markdown = "### ⚠️ Pull Request Review — " + ticketKey + "\n\n" +
                 "**Reviewer:** Alex Mitchell (Staff Software Engineer & Tech Lead @ QuickKart)\n\n" +
-                "**Verdict:** ✅ APPROVED FOR MERGE (Score: 98/100)\n\n" +
-                "**Code Quality Analysis:**\n" +
-                specificDetails + "\n" +
-                "**Student Submission Summary:**\n" +
-                "> \"" + snippetSummary + "\"\n\n" +
-                "**Commendation:** Outstanding job! Your implementation demonstrates strong software craftsmanship and production readiness. You have full approval to merge this Pull Request into `main`!";
+                "**Verdict:** ❌ CHANGES REQUESTED (Score: 10/100)\n\n" +
+                "#### 🚫 Blocker Detected:\n" +
+                "- **No Implementation Submitted:** The editor was submitted empty or contains only comments/placeholders without executable code.\n" +
+                "- In a production engineering environment, every Pull Request must contain working, testable code that implements the ticket requirements.\n\n" +
+                "#### 📋 Required Acceptance Criteria to Pass:\n" +
+                checklist + "\n" +
+                "#### 💡 Next Steps:\n" +
+                "1. Switch to the **'2. Starter Guide & Code'** tab to view architectural guidance or copy a starter skeleton.\n" +
+                "2. Write your Java 21 / Spring Boot implementation in the **'In-Browser Code'** editor.\n" +
+                "3. Click **Revise & Resubmit** when ready for re-review.";
+
+        return new CodeReviewResult(false, 10, "CHANGES REQUESTED", markdown);
+    }
+
+    private CodeReviewResult callGeminiReview(ProjectTicket ticket, String submissionNotes) {
+        String ticketKey = ticket.getTicketKey() != null ? ticket.getTicketKey() : "TASK";
+
+        String prompt = "You are Alex Mitchell, Staff Software Engineer and Tech Lead at QuickKart.\n" +
+                "You are reviewing a Pull Request submitted by a junior software engineer / college intern.\n" +
+                "You must evaluate the code accurately, strictly, and constructively against the ticket's Acceptance Criteria.\n\n" +
+                "Ticket Key: " + ticketKey + "\n" +
+                "Ticket Title: " + ticket.getTitle() + "\n" +
+                "Ticket Description: " + ticket.getDescription() + "\n" +
+                "Acceptance Criteria:\n" + ticket.getAcceptanceCriteria() + "\n\n" +
+                "Candidate Submission:\n" + submissionNotes + "\n\n" +
+                "Evaluation Guidelines:\n" +
+                "1. Examine if the submission actually implements the classes, annotations, business logic, and error handling requested.\n" +
+                "2. If the code is missing critical criteria, has dummy/incomplete methods, or lacks necessary logic:\n" +
+                "   Set VERDICT to CHANGES_REQUESTED. Assign a SCORE between 25 and 65.\n" +
+                "3. Only if the code is a genuine, well-structured, functional implementation meeting the criteria:\n" +
+                "   Set VERDICT to APPROVED. Assign a SCORE between 80 and 99.\n\n" +
+                "CRITICAL REQUIREMENT: Your output MUST start on Line 1 with EXACTLY:\n" +
+                "VERDICT: [APPROVED or CHANGES_REQUESTED] | SCORE: [number]\n\n" +
+                "Then provide the review in clean Markdown:\n" +
+                "### 🚀 Pull Request Review — " + ticketKey + "\n" +
+                "**Reviewer:** Alex Mitchell (Staff Software Engineer & Tech Lead @ QuickKart)\n" +
+                "**Verdict:** [✅ APPROVED FOR MERGE (Score: X/100) or ❌ CHANGES REQUESTED (Score: X/100)]\n\n" +
+                "#### 📊 Acceptance Criteria Status:\n" +
+                "- [x] or [ ] item...\n\n" +
+                "#### 🔍 Code Quality & Architecture Feedback:\n" +
+                "(Constructive feedback on code structure, annotations, error handling, edge cases)\n\n" +
+                "#### 💡 Tech Lead Recommendations & Next Steps:\n" +
+                "(Actionable advice to fix issues or congratulations on merge)";
+
+        String response = callGeminiApi(prompt, ticket);
+        if (response == null || response.isBlank()) {
+            return null;
+        }
+
+        boolean approved = false;
+        int score = 50;
+
+        String[] lines = response.split("\\r?\\n");
+        String firstLine = lines.length > 0 ? lines[0].trim().toUpperCase() : "";
+
+        if (firstLine.startsWith("VERDICT:")) {
+            approved = firstLine.contains("APPROVED") && !firstLine.contains("CHANGES_REQUESTED");
+            if (firstLine.contains("SCORE:")) {
+                try {
+                    String scorePart = firstLine.substring(firstLine.indexOf("SCORE:") + 6).replaceAll("[^0-9]", "");
+                    if (!scorePart.isEmpty()) {
+                        score = Integer.parseInt(scorePart);
+                    }
+                } catch (Exception ignored) {}
+            }
+            // Strip the header line from the student-visible markdown
+            response = response.substring(lines[0].length()).trim();
+        } else {
+            // Fallback parsing if LLM didn't format exact header
+            approved = response.contains("APPROVED FOR MERGE") || response.contains("✅ APPROVED");
+            score = approved ? 92 : 45;
+        }
+
+        if (score < 75) {
+            approved = false;
+        }
+
+        return new CodeReviewResult(
+                approved,
+                score,
+                approved ? "APPROVED FOR MERGE" : "CHANGES REQUESTED",
+                response
+        );
+    }
+
+    private CodeReviewResult evaluateWithSmartCodeAnalyzer(ProjectTicket ticket, String submissionNotes) {
+        String ticketKey = ticket.getTicketKey() != null ? ticket.getTicketKey() : "TASK";
+        String codeLower = submissionNotes.toLowerCase();
+
+        // 1. Structure check
+        boolean hasClassOrInterface = codeLower.contains("class ") || codeLower.contains("interface ") || codeLower.contains("record ");
+        boolean hasMethods = submissionNotes.contains("(") && submissionNotes.contains(")") && submissionNotes.contains("{");
+        boolean hasAnnotations = submissionNotes.contains("@");
+
+        String criteria = ticket.getAcceptanceCriteria() != null ? ticket.getAcceptanceCriteria() : "";
+        String[] criteriaLines = criteria.split("\\r?\\n");
+
+        int totalCriteria = 0;
+        int passedCriteria = 0;
+        StringBuilder criteriaChecklist = new StringBuilder();
+        List<String> missingFeedback = new java.util.ArrayList<>();
+
+        for (String rawLine : criteriaLines) {
+            String line = rawLine.trim();
+            if (line.isEmpty()) continue;
+            totalCriteria++;
+
+            String cleanText = line.replaceFirst("^[\\-*\\d.]+\\s*", "");
+            String lCase = cleanText.toLowerCase();
+
+            boolean passed = false;
+
+            // Contextual criteria checks
+            if (lCase.contains("valid") || lCase.contains("jakarta") || lCase.contains("notnull") || lCase.contains("notblank")) {
+                passed = codeLower.contains("@valid") || codeLower.contains("@notnull") || codeLower.contains("@notblank")
+                        || codeLower.contains("@size") || codeLower.contains("@min") || codeLower.contains("bindingresult");
+                if (!passed) missingFeedback.add("Missing Jakarta Bean Validation annotations (e.g. `@Valid`, `@NotNull`, `@NotBlank`).");
+            } else if (lCase.contains("exception") || lCase.contains("handler") || lCase.contains("error")) {
+                passed = codeLower.contains("@restcontrolleradvice") || codeLower.contains("@controlleradvice")
+                        || codeLower.contains("@exceptionhandler") || codeLower.contains("responseentity")
+                        || codeLower.contains("runtimeexception") || codeLower.contains("errorresponse");
+                if (!passed) missingFeedback.add("Missing Global Exception Handling (`@RestControllerAdvice` and `@ExceptionHandler`).");
+            } else if (lCase.contains("pagin") || lCase.contains("page") || lCase.contains("sort")) {
+                passed = codeLower.contains("pageable") || codeLower.contains("page<") || codeLower.contains("pageresponse")
+                        || codeLower.contains("pagesize") || codeLower.contains("pageabledefault");
+                if (!passed) missingFeedback.add("Missing pagination parameters or Pageable support.");
+            } else if (lCase.contains("filter") || lCase.contains("category") || lCase.contains("price")) {
+                passed = codeLower.contains("category") || codeLower.contains("price") || codeLower.contains("filter")
+                        || codeLower.contains("requestparam");
+                if (!passed) missingFeedback.add("Missing category or price query filter handling.");
+            } else if (lCase.contains("reserv") || lCase.contains("cart") || lCase.contains("stock")) {
+                passed = codeLower.contains("stock") || codeLower.contains("reserve") || codeLower.contains("quantity")
+                        || codeLower.contains("cart") || codeLower.contains("inventory");
+                if (!passed) missingFeedback.add("Missing stock reservation or cart item validation logic.");
+            } else if (lCase.contains("lock") || lCase.contains("race") || lCase.contains("concurren") || lCase.contains("isolation")) {
+                passed = codeLower.contains("@lock") || codeLower.contains("pessimistic") || codeLower.contains("for update")
+                        || codeLower.contains("@transactional") || codeLower.contains("atomic");
+                if (!passed) missingFeedback.add("Missing concurrency guard (e.g. `@Lock(LockModeType.PESSIMISTIC_WRITE)` or `@Transactional`).");
+            } else if (lCase.contains("idempotenc")) {
+                passed = codeLower.contains("idempotenc") || codeLower.contains("header") || codeLower.contains("uuid")
+                        || codeLower.contains("filter");
+                if (!passed) missingFeedback.add("Missing Idempotency-Key validation header check.");
+            } else if (lCase.contains("actuator") || lCase.contains("metric") || lCase.contains("rate limit")) {
+                passed = codeLower.contains("actuator") || codeLower.contains("metric") || codeLower.contains("ratelimit")
+                        || codeLower.contains("filter") || codeLower.contains("meter");
+                if (!passed) missingFeedback.add("Missing actuator / metrics or rate limiting logic.");
+            } else if (lCase.contains("test") || lCase.contains("mockito")) {
+                passed = codeLower.contains("@test") || codeLower.contains("mock") || codeLower.contains("assert")
+                        || codeLower.contains("when(");
+                if (!passed) missingFeedback.add("Missing unit or integration test assertions.");
+            } else {
+                // Heuristic match: check if significant words in the criteria appear in the code
+                String[] words = lCase.replaceAll("[^a-z0-9]", " ").split("\\s+");
+                int matchCount = 0;
+                int significantCount = 0;
+                for (String w : words) {
+                    if (w.length() > 4 && !List.of("should", "ensure", "support", "return", "implement").contains(w)) {
+                        significantCount++;
+                        if (codeLower.contains(w)) matchCount++;
+                    }
+                }
+                passed = (significantCount == 0) || ((double) matchCount / significantCount >= 0.4);
+                if (!passed) missingFeedback.add("Requirement incomplete: " + cleanText);
+            }
+
+            if (passed) {
+                passedCriteria++;
+                criteriaChecklist.append("- [x] ").append(cleanText).append("\n");
+            } else {
+                criteriaChecklist.append("- [ ] ").append(cleanText).append("\n");
+            }
+        }
+
+        // Calculate score
+        double criteriaRatio = totalCriteria > 0 ? ((double) passedCriteria / totalCriteria) : 0.5;
+        int codeLength = submissionNotes.length();
+
+        int score = (int) Math.round(criteriaRatio * 75);
+        if (hasClassOrInterface) score += 10;
+        if (hasMethods) score += 8;
+        if (hasAnnotations) score += 7;
+
+        // Cap score
+        score = Math.min(score, 98);
+        if (codeLength < 100) score = Math.min(score, 40);
+
+        boolean approved = score >= 75 && passedCriteria >= Math.max(1, (int) Math.ceil(totalCriteria * 0.70));
+
+        String specificTip = getSeniorTipForTicket(ticketKey);
+
+        if (approved) {
+            String feedback = "### 🚀 Pull Request Review — " + ticketKey + "\n\n" +
+                    "**Reviewer:** Alex Mitchell (Staff Software Engineer & Tech Lead @ QuickKart)\n\n" +
+                    "**Verdict:** ✅ APPROVED FOR MERGE (Score: " + score + "/100)\n\n" +
+                    "#### 📊 Acceptance Criteria Verification:\n" +
+                    criteriaChecklist + "\n" +
+                    "#### 🔍 Code Quality & Architecture Analysis:\n" +
+                    "- **Clean Design:** Solution follows clean separation of concerns and appropriate Spring Boot paradigms.\n" +
+                    "- **Production Standard:** Implementation adheres to production Java 21 / Spring conventions.\n" +
+                    "- **Senior Tip:** " + specificTip + "\n\n" +
+                    "#### 🎯 Commendation:\n" +
+                    "Outstanding job! Your implementation demonstrates strong software craftsmanship and passes all acceptance criteria. Your Pull Request is approved and merged into `main`!";
+
+            return new CodeReviewResult(true, score, "APPROVED FOR MERGE", feedback);
+        } else {
+            StringBuilder missingSection = new StringBuilder();
+            if (missingFeedback.isEmpty()) {
+                missingSection.append("- Implementation appears too minimal or lacks necessary class and method structure.\n");
+            } else {
+                for (String mf : missingFeedback) {
+                    missingSection.append("- ").append(mf).append("\n");
+                }
+            }
+
+            String feedback = "### ⚠️ Pull Request Review — " + ticketKey + "\n\n" +
+                    "**Reviewer:** Alex Mitchell (Staff Software Engineer & Tech Lead @ QuickKart)\n\n" +
+                    "**Verdict:** ❌ CHANGES REQUESTED (Score: " + score + "/100)\n\n" +
+                    "#### 📊 Acceptance Criteria Status:\n" +
+                    criteriaChecklist + "\n" +
+                    "#### 🔍 What Needs Fixing:\n" +
+                    missingSection + "\n" +
+                    "#### 💡 Senior Engineer Guidance:\n" +
+                    "- " + specificTip + "\n" +
+                    "- Make sure your implementation code in the editor provides the complete classes, annotations, and methods required.\n" +
+                    "- Once you have addressed the missing items above, click **Revise & Resubmit**!";
+
+            return new CodeReviewResult(false, score, "CHANGES REQUESTED", feedback);
+        }
+    }
+
+    private String getSeniorTipForTicket(String ticketKey) {
+        return switch (ticketKey) {
+            case "QK-101" -> "For high-traffic catalog search, place an in-memory Redis cache on the top product categories to reduce Postgres read latency by 80%.";
+            case "QK-102" -> "Implement an asynchronous background scheduler or Redis TTL keyspace listener to automatically release expired reservations after 15 minutes.";
+            case "QK-103" -> "Under massive flash sale concurrency, consider atomic SQL decrement (`UPDATE product SET stock = stock - ? WHERE id = ? AND stock >= ?`) or optimistic locking with `@Version` to avoid lock wait contention.";
+            case "QK-104" -> "Add a unique database constraint on `(user_id, idempotency_key)` as a bulletproof final defense against duplicate network retries.";
+            case "QK-105" -> "Configure Prometheus alerts on p99 latency (> 250ms) and 5xx error rate (> 1%) in Grafana for automated incident response.";
+            default -> "Always define explicit `@ExceptionHandler` mappings for custom domain exceptions and write unit tests verifying HTTP status codes.";
+        };
     }
 
     private AiChatResponse buildResponse(String text) {
@@ -468,3 +687,4 @@ public class AiTechLeadService {
                 .build();
     }
 }
+

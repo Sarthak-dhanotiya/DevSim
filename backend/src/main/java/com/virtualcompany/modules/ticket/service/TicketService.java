@@ -1,5 +1,6 @@
 package com.virtualcompany.modules.ticket.service;
 
+import com.virtualcompany.common.exception.BadRequestException;
 import com.virtualcompany.common.exception.ResourceNotFoundException;
 import com.virtualcompany.modules.company.dto.CompanyResponse;
 import com.virtualcompany.modules.enrollment.entity.EnrollmentStatus;
@@ -130,26 +131,41 @@ public class TicketService {
                         .build());
 
         TicketStatus newStatus = request.getStatus();
-        progress.setStatus(newStatus);
 
         if (request.getSubmissionNotes() != null) {
             progress.setSubmissionNotes(request.getSubmissionNotes().trim());
         }
 
-        if (newStatus == TicketStatus.IN_PROGRESS && progress.getStartedAt() == null) {
-            progress.setStartedAt(Instant.now());
-            if (progress.getBranchName() == null) {
-                String cleanTitle = ticket.getTitle().toLowerCase()
-                        .replaceAll("[^a-z0-9]+", "-")
-                        .replaceAll("^-|-$", "");
-                progress.setBranchName("feature/" + ticket.getTicketKey().toLowerCase() + "-" + cleanTitle);
+        if (newStatus == TicketStatus.DONE) {
+            // Workflow Gate: Student cannot manually bypass code review to mark ticket DONE
+            if (progress.getAiReviewFeedback() == null || !progress.getAiReviewFeedback().contains("APPROVED")) {
+                throw new BadRequestException("Ticket cannot be marked DONE without passing AI Tech Lead Code Review.");
             }
-        } else if (newStatus == TicketStatus.IN_REVIEW) {
-            // Generate automated AI review feedback
-            String feedback = aiTechLeadService.generateReviewFeedback(ticket, progress.getSubmissionNotes());
-            progress.setAiReviewFeedback(feedback);
-        } else if (newStatus == TicketStatus.DONE) {
+            progress.setStatus(TicketStatus.DONE);
             progress.setCompletedAt(Instant.now());
+        } else if (newStatus == TicketStatus.IN_REVIEW) {
+            // Strict Tech Lead code review
+            AiTechLeadService.CodeReviewResult reviewResult = aiTechLeadService.evaluateSubmission(ticket, progress.getSubmissionNotes());
+            progress.setAiReviewFeedback(reviewResult.feedbackMarkdown());
+
+            if (reviewResult.approved()) {
+                progress.setStatus(TicketStatus.DONE);
+                progress.setCompletedAt(Instant.now());
+            } else {
+                // Keep IN_PROGRESS so student can review feedback, revise code, and resubmit
+                progress.setStatus(TicketStatus.IN_PROGRESS);
+            }
+        } else {
+            progress.setStatus(newStatus);
+            if (newStatus == TicketStatus.IN_PROGRESS && progress.getStartedAt() == null) {
+                progress.setStartedAt(Instant.now());
+                if (progress.getBranchName() == null) {
+                    String cleanTitle = ticket.getTitle().toLowerCase()
+                            .replaceAll("[^a-z0-9]+", "-")
+                            .replaceAll("^-|-$", "");
+                    progress.setBranchName("feature/" + ticket.getTicketKey().toLowerCase() + "-" + cleanTitle);
+                }
+            }
         }
 
         StudentTicketProgress saved = progressRepository.save(progress);

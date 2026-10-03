@@ -173,6 +173,133 @@ public class RateLimitingFilter extends OncePerRequestFilter {
   },
 };
 
+function getStarterTemplate(ticket?: ProjectTicket | null): StarterTemplate {
+  if (!ticket) {
+    return {
+      filename: 'Solution.java',
+      guide: 'Write your Java implementation satisfying the ticket acceptance criteria.',
+      skeleton: '// Write or paste your implementation code here...\n',
+    };
+  }
+
+  if (STARTER_TEMPLATES[ticket.ticketKey]) {
+    return STARTER_TEMPLATES[ticket.ticketKey];
+  }
+
+  const title = (ticket.title || '').toLowerCase();
+  const criteria = (ticket.acceptanceCriteria || '').toLowerCase();
+
+  if (
+    title.includes('validation') ||
+    title.includes('exception') ||
+    criteria.includes('validation') ||
+    criteria.includes('exception') ||
+    criteria.includes('@valid')
+  ) {
+    return {
+      filename: 'GlobalExceptionHandler.java',
+      guide: 'Implement Jakarta Bean Validation and Global Exception Handling using @RestControllerAdvice and @ExceptionHandler.',
+      skeleton: `@RestControllerAdvice
+@Slf4j
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = new HashMap<>();
+        ex.getBindingResult().getFieldErrors().forEach(error -> 
+            errors.put(error.getField(), error.getDefaultMessage())
+        );
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("timestamp", Instant.now());
+        response.put("status", HttpStatus.BAD_REQUEST.value());
+        response.put("errors", errors);
+
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNotFound(ResourceNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+            "timestamp", Instant.now(),
+            "status", 404,
+            "message", ex.getMessage()
+        ));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
+        log.error("Unhandled server exception: ", ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+            "timestamp", Instant.now(),
+            "status", 500,
+            "message", "An unexpected server error occurred."
+        ));
+    }
+}`,
+    };
+  }
+
+  if (title.includes('security') || title.includes('jwt') || title.includes('auth')) {
+    return {
+      filename: 'SecurityConfig.java',
+      guide: 'Configure Spring Security filter chain with JWT authentication filter and stateless session management.',
+      skeleton: `@Configuration
+@EnableWebSecurity
+@RequiredArgsConstructor
+public class SecurityConfig {
+
+    private final JwtAuthenticationFilter jwtAuthFilter;
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        return http
+            .csrf(AbstractHttpConfigurer::disable)
+            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/api/v1/auth/**").permitAll()
+                .anyRequest().authenticated()
+            )
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+            .build();
+    }
+}`,
+    };
+  }
+
+  const className = (ticket.title || 'Solution')
+    .replace(/[^a-zA-Z0-9 ]/g, '')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join('') + 'Service';
+
+  return {
+    filename: `${className}.java`,
+    guide: `Implement the solution for "${ticket.title}" satisfying the acceptance criteria listed in Requirements.`,
+    skeleton: `@Service
+@Slf4j
+@RequiredArgsConstructor
+public class ${className} {
+
+    // TODO: Inject required repositories or dependencies
+
+    /**
+     * Implementation satisfying ticket criteria:
+${(ticket.acceptanceCriteria || '')
+  .split('\n')
+  .filter(Boolean)
+  .map((c) => `     * ${c.replace(/^-/, '•')}`)
+  .join('\n')}
+     */
+    public void execute() {
+        // Implement your solution logic here
+    }
+}`,
+  };
+}
+
 const COLUMNS: { id: TicketStatus; label: string; countColor: string }[] = [
   { id: 'TODO', label: 'To Do', countColor: 'text-slate-500 bg-slate-100 dark:bg-slate-800' },
   { id: 'IN_PROGRESS', label: 'In Progress', countColor: 'text-blue-700 bg-blue-50 dark:bg-blue-950/50 dark:text-blue-300' },
@@ -285,12 +412,20 @@ function WorkspaceContent() {
 
   function openTicketModal(ticket: ProjectTicket) {
     setSelectedTicket(ticket);
-    setSubmissionNotes(ticket.submissionNotes || '');
-    const template = STARTER_TEMPLATES[ticket.ticketKey];
-    if (template) {
+    const template = getStarterTemplate(ticket);
+
+    if (ticket.submissionNotes && ticket.submissionNotes.includes('Code Snippet:')) {
+      const parts = ticket.submissionNotes.split('Developer Notes:');
+      const snippetPart = parts[0].replace('Code Snippet:', '').trim();
+      const devNotesPart = parts[1] ? parts[1].trim() : '';
+      setCodeSnippet(snippetPart);
+      setSubmissionNotes(devNotesPart);
+    } else {
+      setSubmissionNotes(ticket.submissionNotes || '');
       setCodeSnippet(template.skeleton);
     }
-    if (ticket.status === 'IN_REVIEW' || ticket.status === 'DONE') {
+
+    if (ticket.status === 'IN_REVIEW' || ticket.status === 'DONE' || ticket.aiReviewFeedback) {
       setModalTab('submit');
     } else {
       setModalTab('overview');
@@ -659,248 +794,307 @@ function WorkspaceContent() {
               {/* TAB 2: STARTER GUIDE & CODE SKELETON */}
               {modalTab === 'guide' && (
                 <div className="space-y-4">
-                  {STARTER_TEMPLATES[selectedTicket.ticketKey] ? (
-                    <>
-                      <div className="p-3.5 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 space-y-1.5">
-                        <span className="font-bold text-xs text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
-                          <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                          Engineering Guidance from Alex Mitchell
-                        </span>
-                        <p className="text-xs text-amber-950 dark:text-amber-200 leading-relaxed">
-                          {STARTER_TEMPLATES[selectedTicket.ticketKey].guide}
-                        </p>
-                      </div>
-
-                      {/* Code Block */}
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-950 text-slate-200 font-mono text-xs">
-                        <div className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Code2 className="w-4 h-4 text-blue-400" />
-                            <span className="font-bold text-slate-300 text-xs">
-                              {STARTER_TEMPLATES[selectedTicket.ticketKey].filename}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(STARTER_TEMPLATES[selectedTicket.ticketKey].skeleton);
-                                setCopiedTemplate(true);
-                                setTimeout(() => setCopiedTemplate(false), 2000);
-                              }}
-                              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] flex items-center gap-1 transition-colors"
-                            >
-                              {copiedTemplate ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedTemplate ? 'Copied' : 'Copy Skeleton'}</span>
-                            </button>
-
-                            <button
-                              onClick={() => {
-                                setCodeSnippet(STARTER_TEMPLATES[selectedTicket.ticketKey].skeleton);
-                                setModalTab('submit');
-                              }}
-                              className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-[11px] flex items-center gap-1 transition-colors"
-                            >
-                              <Rocket className="w-3 h-3" />
-                              <span>Use in Submit Tab &rarr;</span>
-                            </button>
-                          </div>
+                  {(() => {
+                    const currentTemplate = getStarterTemplate(selectedTicket);
+                    return (
+                      <>
+                        <div className="p-3.5 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20 space-y-1.5">
+                          <span className="font-bold text-xs text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                            <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                            Engineering Guidance from Alex Mitchell
+                          </span>
+                          <p className="text-xs text-amber-950 dark:text-amber-200 leading-relaxed">
+                            {currentTemplate.guide}
+                          </p>
                         </div>
 
-                        <pre className="p-4 overflow-x-auto text-[11px] leading-relaxed text-slate-300 font-mono">
-                          {STARTER_TEMPLATES[selectedTicket.ticketKey].skeleton}
-                        </pre>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="p-6 text-center text-xs text-slate-500">
-                      Starter template available directly in the chat with Alex!
-                    </div>
-                  )}
+                        {/* Code Block */}
+                        <div className="rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden bg-slate-950 text-slate-200 font-mono text-xs">
+                          <div className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Code2 className="w-4 h-4 text-blue-400" />
+                              <span className="font-bold text-slate-300 text-xs">
+                                {currentTemplate.filename}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(currentTemplate.skeleton);
+                                  setCopiedTemplate(true);
+                                  setTimeout(() => setCopiedTemplate(false), 2000);
+                                }}
+                                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] flex items-center gap-1 transition-colors"
+                              >
+                                {copiedTemplate ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                                <span>{copiedTemplate ? 'Copied' : 'Copy Skeleton'}</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setCodeSnippet(currentTemplate.skeleton);
+                                  setModalTab('submit');
+                                }}
+                                className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-[11px] flex items-center gap-1 transition-colors"
+                              >
+                                <Rocket className="w-3 h-3" />
+                                <span>Use in Submit Tab &rarr;</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <pre className="p-4 overflow-x-auto text-[11px] leading-relaxed text-slate-300 font-mono">
+                            {currentTemplate.skeleton}
+                          </pre>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 
               {/* TAB 3: SUBMIT SOLUTION & AI REVIEW */}
               {modalTab === 'submit' && (
                 <div className="space-y-4">
-                  {/* Status Banner */}
-                  {selectedTicket.status === 'DONE' && (
-                    <div className="p-4 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                        ✓
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
-                          Ticket Merged & Completed!
-                        </h4>
-                        <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">
-                          Alex Mitchell approved your Pull Request and merged it into main. Sprint progress updated!
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  {(() => {
+                    const isApproved = Boolean(
+                      selectedTicket.aiReviewFeedback &&
+                      (selectedTicket.aiReviewFeedback.includes('APPROVED FOR MERGE') || selectedTicket.aiReviewFeedback.includes('✅ APPROVED')) &&
+                      !selectedTicket.aiReviewFeedback.includes('CHANGES REQUESTED')
+                    );
 
-                  {/* AI Tech Lead Review Card (Visible when IN_REVIEW or DONE) */}
-                  {selectedTicket.aiReviewFeedback && (
-                    <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/20 space-y-3">
-                      <div className="flex items-center justify-between border-b border-blue-200 dark:border-blue-900/40 pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs">
-                            AM
+                    return (
+                      <>
+                        {/* Status Banner */}
+                        {selectedTicket.status === 'DONE' && (
+                          <div className="p-4 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/40 flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                              ✓
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                                Ticket Merged & Completed!
+                              </h4>
+                              <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">
+                                Alex Mitchell approved your Pull Request and merged it into main. Sprint progress updated!
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <span className="font-bold text-xs text-slate-900 dark:text-white block">
-                              Alex Mitchell
-                            </span>
-                            <span className="text-[11px] text-slate-500">
-                              Staff Software Engineer & Tech Lead @ QuickKart
-                            </span>
-                          </div>
-                        </div>
+                        )}
 
-                        <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Approved
-                        </span>
-                      </div>
+                        {/* AI Tech Lead Review Card (Visible when review feedback is present) */}
+                        {selectedTicket.aiReviewFeedback && (
+                          <div className={`p-4 rounded-xl border space-y-3 ${
+                            isApproved
+                              ? 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20'
+                              : 'border-amber-300 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20'
+                          }`}>
+                            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 pb-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className={`w-8 h-8 rounded-full text-white font-bold flex items-center justify-center text-xs shadow-sm ${
+                                  isApproved ? 'bg-emerald-600' : 'bg-amber-600'
+                                }`}>
+                                  AM
+                                </div>
+                                <div>
+                                  <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                                    Alex Mitchell
+                                  </span>
+                                  <span className="text-[11px] text-slate-500">
+                                    Staff Software Engineer & Tech Lead @ QuickKart
+                                  </span>
+                                </div>
+                              </div>
 
-                      <div className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-line bg-white/80 dark:bg-slate-900/80 p-3.5 rounded-lg border border-blue-100 dark:border-blue-900/40">
-                        {selectedTicket.aiReviewFeedback}
-                      </div>
+                              <span className={`text-xs px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 ${
+                                isApproved
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                              }`}>
+                                {isApproved ? (
+                                  <>
+                                    <CheckCircle2 className="w-3.5 h-3.5" /> Approved for Merge
+                                  </>
+                                ) : (
+                                  <>
+                                    <AlertCircle className="w-3.5 h-3.5" /> Changes Requested
+                                  </>
+                                )}
+                              </span>
+                            </div>
 
-                      {selectedTicket.status === 'IN_REVIEW' && (
-                        <div className="pt-2 flex items-center justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            disabled={isUpdatingStatus}
-                            onClick={() => handleStatusChange(selectedTicket, 'DONE')}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5"
-                          >
-                            <Check className="w-4 h-4" />
-                            <span>Approve & Merge to Main (Done)</span>
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                            <div className={`text-xs leading-relaxed whitespace-pre-line p-3.5 rounded-lg border ${
+                              isApproved
+                                ? 'text-emerald-950 dark:text-emerald-100 bg-white/90 dark:bg-slate-900/90 border-emerald-100 dark:border-emerald-900/40'
+                                : 'text-slate-800 dark:text-slate-200 bg-white/90 dark:bg-slate-900/90 border-amber-200 dark:border-amber-900/40'
+                            }`}>
+                              {selectedTicket.aiReviewFeedback}
+                            </div>
 
-                  {/* Submission Form (When TODO or IN_PROGRESS or revising) */}
-                  {selectedTicket.status !== 'DONE' && (
-                    <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3.5">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                        <div className="flex items-center gap-2">
-                          <Rocket className="w-4 h-4 text-blue-500" />
-                          <span className="font-bold text-xs text-slate-900 dark:text-white">
-                            Submit Your Solution for Tech Lead PR Review
-                          </span>
-                        </div>
-
-                        {/* Submission Mode Toggle */}
-                        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-[11px]">
-                          <button
-                            type="button"
-                            onClick={() => setSubmissionMode('code')}
-                            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                              submissionMode === 'code'
-                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
-                                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                            }`}
-                          >
-                            💻 In-Browser Code
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSubmissionMode('github')}
-                            className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                              submissionMode === 'github'
-                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
-                                : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                            }`}
-                          >
-                            🔗 GitHub PR Link
-                          </button>
-                        </div>
-                      </div>
-
-                      {submissionMode === 'code' ? (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-semibold text-slate-700 dark:text-slate-300">
-                              Your Java / Spring Boot Implementation
-                            </span>
-                            {STARTER_TEMPLATES[selectedTicket.ticketKey] && (
-                              <button
-                                type="button"
-                                onClick={() => setCodeSnippet(STARTER_TEMPLATES[selectedTicket.ticketKey].skeleton)}
-                                className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
-                              >
-                                <Sparkles className="w-3 h-3 text-amber-500" />
-                                <span>Auto-Fill Starter Code</span>
-                              </button>
+                            {!isApproved && selectedTicket.status !== 'DONE' && (
+                              <div className="p-2.5 rounded-lg bg-amber-100/70 dark:bg-amber-950/40 text-[11px] text-amber-900 dark:text-amber-200 flex items-center gap-2 font-medium">
+                                <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                                <span>Alex requested changes. Please review the checklist above, update your implementation code below, and click <strong>Revise & Resubmit</strong>.</span>
+                              </div>
                             )}
                           </div>
+                        )}
 
-                          <textarea
-                            rows={8}
-                            value={codeSnippet}
-                            onChange={(e) => setCodeSnippet(e.target.value)}
-                            placeholder="// Write or paste your implementation code here..."
-                            className="w-full text-xs font-mono p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-950 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 leading-relaxed resize-y"
-                          />
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            GitHub Pull Request / Commit URL
-                          </label>
-                          <input
-                            type="url"
-                            value={githubPrUrl}
-                            onChange={(e) => setGithubPrUrl(e.target.value)}
-                            placeholder="https://github.com/your-username/quickkart-backend/pull/1"
-                            className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
-                        </div>
-                      )}
+                        {/* Submission Form (When ticket is not yet marked DONE) */}
+                        {selectedTicket.status !== 'DONE' && (
+                          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                              <div className="flex items-center gap-2">
+                                <Rocket className="w-4 h-4 text-blue-500" />
+                                <span className="font-bold text-xs text-slate-900 dark:text-white">
+                                  {selectedTicket.aiReviewFeedback && !isApproved
+                                    ? 'Revise Your Implementation'
+                                    : 'Submit Your Solution for Tech Lead PR Review'}
+                                </span>
+                              </div>
 
-                      {/* Developer Notes / Description */}
-                      <div className="space-y-1.5">
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                          PR Description / Solution Summary
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={submissionNotes}
-                          onChange={(e) => setSubmissionNotes(e.target.value)}
-                          placeholder="e.g. Implemented ProductController with category filtering, added Pageable pagination, and verified edge cases."
-                          className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
+                              {/* Submission Mode Toggle */}
+                              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-[11px]">
+                                <button
+                                  type="button"
+                                  onClick={() => setSubmissionMode('code')}
+                                  className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                                    submissionMode === 'code'
+                                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                  }`}
+                                >
+                                  💻 In-Browser Code
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSubmissionMode('github')}
+                                  className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                                    submissionMode === 'github'
+                                      ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                                  }`}
+                                >
+                                  🔗 GitHub PR Link
+                                </button>
+                              </div>
+                            </div>
 
-                      {/* Submit Button */}
-                      <div className="pt-1 flex items-center justify-between">
-                        <span className="text-[11px] text-slate-400">
-                          Instant AI code review will be generated by Alex Mitchell
-                        </span>
+                            {submissionMode === 'code' ? (
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                    Your Java / Spring Boot Implementation
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setCodeSnippet(getStarterTemplate(selectedTicket).skeleton)}
+                                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
+                                  >
+                                    <Sparkles className="w-3 h-3 text-amber-500" />
+                                    <span>Auto-Fill Starter Code</span>
+                                  </button>
+                                </div>
 
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          disabled={isUpdatingStatus}
-                          onClick={() => {
-                            const combined = submissionMode === 'code'
-                              ? `Code Snippet:\n${codeSnippet}\n\nDeveloper Notes:\n${submissionNotes}`
-                              : `GitHub PR URL: ${githubPrUrl}\n\nDeveloper Notes:\n${submissionNotes}`;
-                            handleStatusChange(selectedTicket, 'IN_REVIEW', combined);
-                          }}
-                          className="flex items-center gap-1.5"
-                        >
-                          <Rocket className="w-3.5 h-3.5" />
-                          <span>Submit for AI Tech Lead Review</span>
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                                <textarea
+                                  rows={8}
+                                  value={codeSnippet}
+                                  onChange={(e) => setCodeSnippet(e.target.value)}
+                                  placeholder="// Write or paste your implementation code here..."
+                                  className="w-full text-xs font-mono p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-950 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 leading-relaxed resize-y"
+                                />
+                              </div>
+                            ) : (
+                              <div className="space-y-1.5">
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                  GitHub Pull Request / Commit URL
+                                </label>
+                                <input
+                                  type="url"
+                                  value={githubPrUrl}
+                                  onChange={(e) => setGithubPrUrl(e.target.value)}
+                                  placeholder="https://github.com/your-username/quickkart-backend/pull/1"
+                                  className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                              </div>
+                            )}
+
+                            {/* Developer Notes / Description */}
+                            <div className="space-y-1.5">
+                              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                PR Description / Solution Summary
+                              </label>
+                              <textarea
+                                rows={2}
+                                value={submissionNotes}
+                                onChange={(e) => setSubmissionNotes(e.target.value)}
+                                placeholder="e.g. Implemented Jakarta Bean Validation with @RestControllerAdvice and custom Exception handler."
+                                className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            </div>
+
+                            {/* Submit Button */}
+                            <div className="pt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <span className="text-[11px] text-slate-400">
+                                {selectedTicket.aiReviewFeedback && !isApproved
+                                  ? 'Alex will re-evaluate your revised code against Acceptance Criteria'
+                                  : 'Instant AI code review will be evaluated by Alex Mitchell'}
+                              </span>
+
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                disabled={isUpdatingStatus}
+                                onClick={() => {
+                                  if (submissionMode === 'code') {
+                                    const cleaned = codeSnippet
+                                      .replace(/\/\/.*/g, '')
+                                      .replace(/\/\*[\s\S]*?\*\//g, '')
+                                      .trim();
+                                    if (!cleaned || cleaned.length < 25) {
+                                      alert('⚠️ Please write or paste your Java implementation code before submitting for Tech Lead review.');
+                                      return;
+                                    }
+                                  } else if (!githubPrUrl.trim()) {
+                                    alert('⚠️ Please provide a valid GitHub PR or commit URL.');
+                                    return;
+                                  }
+
+                                  const combined = submissionMode === 'code'
+                                    ? `Code Snippet:\n${codeSnippet}\n\nDeveloper Notes:\n${submissionNotes}`
+                                    : `GitHub PR URL: ${githubPrUrl}\n\nDeveloper Notes:\n${submissionNotes}`;
+                                  handleStatusChange(selectedTicket, 'IN_REVIEW', combined);
+                                }}
+                                className={`flex items-center gap-1.5 ${
+                                  selectedTicket.aiReviewFeedback && !isApproved
+                                    ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                                    : ''
+                                }`}
+                              >
+                                {isUpdatingStatus ? (
+                                  <>
+                                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Alex is Reviewing Your Code...</span>
+                                  </>
+                                ) : selectedTicket.aiReviewFeedback && !isApproved ? (
+                                  <>
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                    <span>Revise & Resubmit for Review</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Rocket className="w-3.5 h-3.5" />
+                                    <span>Submit for AI Tech Lead Review</span>
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>
