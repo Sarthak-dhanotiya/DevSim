@@ -266,50 +266,88 @@ public class AiTaskGenerationService {
     ) {
         String company = project.getCompany() != null ? project.getCompany().getName() : "Enterprise";
         String proj = project.getName();
+        String focusLower = (focus != null) ? focus.toLowerCase() : "";
 
         List<GeneratedTicketDraft> pool = new ArrayList<>();
 
-        pool.add(new GeneratedTicketDraft(
-                "Implement Distributed Rate Limiter for Public API Gateways",
-                company + " is experiencing intermittent traffic spikes causing resource exhaustion. Implement a sliding-window rate limiter using Redis / Bucket4j to safeguard endpoints from abusive clients.",
-                "- Enforce 100 requests/minute per authenticated client API key.\n- Return HTTP 429 Too Many Requests with Retry-After header.\n- Write unit tests verifying limit enforcement and reset behavior.",
-                "SECURITY", "HIGH", 5
-        ));
-
-        pool.add(new GeneratedTicketDraft(
-                "Resolve Concurrency Race Condition in Flash Sale Inventory Deduction",
-                "During peak flash sale checkout in " + proj + ", multiple simultaneous requests can cause inventory to drop below zero. Implement pessimistic/optimistic locking with retry semantics.",
-                "- Use JPA @Version optimistic locking or SELECT FOR UPDATE pessimistic locking on stock balance.\n- Throw InsufficientStockException and handle rollback cleanly.\n- Integration test with 50 concurrent threads verifying zero overselling.",
-                "BUG", "CRITICAL", 6
-        ));
-
-        pool.add(new GeneratedTicketDraft(
-                "Implement Idempotent Webhook Processing with De-duplication",
-                company + " integrates with external payment gateways. Payment webhook events can be delivered multiple times. Implement an idempotency store to prevent duplicate charge processing.",
-                "- Verify webhook cryptographic signature header (HMAC SHA-256).\n- Store processed event IDs with TTL in database table.\n- Return HTTP 200 immediately for duplicated payloads without re-executing orders.",
-                "FEATURE", "HIGH", 4
-        ));
-
-        pool.add(new GeneratedTicketDraft(
-                "Implement Audit Logging & Event Sourcing for Sensitive Data Mutations",
-                "Compliance requires all privilege changes and critical financial transactions to be immutably audited. Implement a Spring AOP aspect intercepting target service methods.",
-                "- Capture actor userId, IP address, before/after state diff, and timestamp.\n- Persist audit events asynchronously so business latency is unaffected.\n- Provide an administrative query API with pagination and date range filters.",
-                "SECURITY", "MEDIUM", 4
-        ));
-
-        pool.add(new GeneratedTicketDraft(
-                "Multi-Level Redis Caching & Cache-Aside Invalidation Engine",
-                "Database read latency is climbing on product catalog searches. Implement cache-aside caching with automatic invalidation upon product updates.",
-                "- Configure RedisCacheManager with 15-minute TTL.\n- Annotate queries with @Cacheable and update mutations with @CacheEvict.\n- Benchmark 70% latency reduction on hot read paths.",
-                "PERFORMANCE", "HIGH", 5
-        ));
-
-        pool.add(new GeneratedTicketDraft(
-                "Fix Memory Leak in Background CSV Report Generation Worker",
-                "Out-of-memory errors occur when exporting large customer datasets. Refactor JDBC streaming or JPA paging to process data in small batch windows rather than loading full lists into RAM.",
-                "- Replace findAll() with ScrollableResults or PageRequest batch iteration.\n- Stream output directly to OutputStream.\n- Verify constant heap memory usage under 100k records.",
-                "BUG", "CRITICAL", 5
-        ));
+        if (focusLower.contains("security") || focusLower.contains("auth")) {
+            pool.add(new GeneratedTicketDraft(
+                    "Enforce Fine-Grained Role-Based Access Control (RBAC) & Method Security",
+                    company + "'s " + proj + " requires strict access control between Admin, Manager, and Standard roles. Secure sensitive endpoints using Spring Security @PreAuthorize annotations.",
+                    "- Define custom permission evaluator or role hierarchy in SecurityConfig.\n- Secure all modification endpoints with @PreAuthorize(\"hasRole('ADMIN')\").\n- Return HTTP 403 Forbidden with standard ErrorResponse DTO when access is denied.\n- Write unit tests for access enforcement.",
+                    "SECURITY", "HIGH", 4
+            ));
+            pool.add(new GeneratedTicketDraft(
+                    "Implement Secure Password Policy & BCrypt Cost Tuning",
+                    "Enforce modern NIST password guidelines across " + company + "'s authentication system to prevent weak or breached credentials.",
+                    "- Require minimum 8 characters with at least one uppercase, digit, and special character.\n- Tune BCryptPasswordEncoder strength to work factor 12.\n- Add custom Bean Validation @ValidPassword annotation on registration and reset DTOs.",
+                    "SECURITY", "MEDIUM", 3
+            ));
+            pool.add(new GeneratedTicketDraft(
+                    "Implement Distributed Rate Limiter for Public Authentication Gateways",
+                    company + " is experiencing credential stuffing and brute-force attempts on " + proj + ". Implement rate limiting to throttle excessive login requests.",
+                    "- Enforce 10 requests/minute per client IP on /api/v1/auth/login.\n- Return HTTP 429 Too Many Requests with Retry-After header.\n- Write integration test verifying lockout after limit exceeded.",
+                    "SECURITY", "HIGH", 5
+            ));
+            pool.add(new GeneratedTicketDraft(
+                    "Implement Audit Logging for Sensitive Resource Modifications",
+                    "Compliance requires all privilege changes and critical transactions in " + proj + " to be immutably audited. Implement an AOP aspect intercepting target service methods.",
+                    "- Capture actor userId, IP address, before/after state diff, and timestamp.\n- Persist audit events asynchronously so business latency is unaffected.\n- Provide an administrative query API with pagination and date range filters.",
+                    "SECURITY", "MEDIUM", 4
+            ));
+        } else if (focusLower.contains("cache") || focusLower.contains("performance")) {
+            pool.add(new GeneratedTicketDraft(
+                    "Multi-Level Redis Caching & Cache-Aside Invalidation Engine",
+                    "Database read latency is climbing on high-traffic queries in " + proj + ". Implement cache-aside caching with automatic invalidation upon updates.",
+                    "- Configure RedisCacheManager with 15-minute TTL.\n- Annotate read queries with @Cacheable and mutations with @CacheEvict.\n- Benchmark 70% latency reduction on hot read paths.",
+                    "PERFORMANCE", "HIGH", 5
+            ));
+            pool.add(new GeneratedTicketDraft(
+                    "Optimize Database Query Execution Plans and Add Composite Indexing",
+                    "Slow query logs in " + company + " show frequent full table scans on " + proj + " queries with multiple WHERE filters.",
+                    "- Analyze EXPLAIN ANALYZE execution plan for slow search queries.\n- Create composite indexes on frequently filtered column pairs.\n- Verify query execution time drops under 50ms.",
+                    "PERFORMANCE", "MEDIUM", 4
+            ));
+            pool.add(new GeneratedTicketDraft(
+                    "Implement Async Non-Blocking Notification Worker with Virtual Threads",
+                    "Blocking HTTP and email dispatch slows down primary user flows in " + proj + ". Refactor email/event dispatch into an async execution pipeline.",
+                    "- Enable Java 21 Virtual Threads for Spring task executor.\n- Decouple synchronous calls using CompletableFuture and @Async.\n- Verify API response latency drops by at least 60%.",
+                    "PERFORMANCE", "HIGH", 4
+            ));
+        } else if (focusLower.contains("bug") || focusLower.contains("concurrency")) {
+            pool.add(new GeneratedTicketDraft(
+                    "Resolve Concurrency Race Condition in Resource Reservation",
+                    "Under high concurrent traffic in " + proj + ", simultaneous requests can bypass balance checks. Implement pessimistic or optimistic locking with retry semantics.",
+                    "- Use JPA @Version optimistic locking or SELECT FOR UPDATE pessimistic locking.\n- Throw custom BusinessConflictException and handle rollback cleanly.\n- Integration test with 30 concurrent threads verifying zero overselling or double booking.",
+                    "BUG", "CRITICAL", 6
+            ));
+            pool.add(new GeneratedTicketDraft(
+                    "Fix Memory Leak in Background Batch Report Generation Worker",
+                    "Out-of-memory errors occur when exporting large datasets in " + company + ". Refactor JDBC streaming or JPA paging to process data in small batch windows rather than loading full lists into RAM.",
+                    "- Replace findAll() with ScrollableResults or PageRequest batch iteration.\n- Stream output directly to OutputStream.\n- Verify constant heap memory usage under 100k records.",
+                    "BUG", "CRITICAL", 5
+            ));
+        } else {
+            // General / CRUD / REST
+            pool.add(new GeneratedTicketDraft(
+                    "Implement RESTful Management APIs with Category Filtering & Pagination",
+                    company + " needs a robust service in " + proj + " allowing clients to search, filter, and paginate primary resources.",
+                    "- Implement GET endpoints supporting page, size, and multi-field sorting.\n- Support filtering by status and date range.\n- Return HTTP 200 with standard PageResponse DTO.\n- Write unit tests for Service and integration test for Controller.",
+                    "FEATURE", "HIGH", 4
+            ));
+            pool.add(new GeneratedTicketDraft(
+                    "Build Jakarta Bean Validation & Global Exception Handling Suite",
+                    "Input payloads in " + proj + " currently allow invalid or empty fields, resulting in unexpected database 500 errors. Add strict validation rules.",
+                    "- Annotate request DTOs with @NotBlank, @Size, @Email, and custom validators.\n- Catch MethodArgumentNotValidException in GlobalExceptionHandler.\n- Return uniform ErrorResponse with field-level error messages.",
+                    "FEATURE", "MEDIUM", 3
+            ));
+            pool.add(new GeneratedTicketDraft(
+                    "Implement Idempotent Event Processing with De-duplication Store",
+                    company + " integrates with external webhooks and events in " + proj + ". Implement an idempotency store to prevent duplicate processing.",
+                    "- Verify cryptographic signature header.\n- Store processed event IDs with TTL in database table.\n- Return HTTP 200 immediately for duplicated payloads without re-executing operations.",
+                    "FEATURE", "HIGH", 4
+            ));
+        }
 
         Collections.shuffle(pool);
         return pool.stream().limit(count).collect(Collectors.toList());
