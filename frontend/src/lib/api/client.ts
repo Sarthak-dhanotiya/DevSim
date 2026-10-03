@@ -16,6 +16,7 @@ import {
   CreateManualTicketPayload,
   Role,
 } from '../types';
+import type { JourneyState, AssignmentRequest, Evidence } from '../journey';
 
 function getBaseUrl(): string {
   let url = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1').trim();
@@ -42,7 +43,7 @@ class ApiClient {
   ): Promise<ApiResponse<T>> {
     const token = this.getToken();
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+      ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       Accept: 'application/json',
       ...((options.headers as Record<string, string>) || {}),
     };
@@ -73,7 +74,24 @@ class ApiClient {
   }
 
   // --- AUTH ---
-  async register(body: { name: string; email: string; password?: string }) {
+  async getJourney() { return this.request<JourneyState>('/journey'); }
+  async saveJourney(body: { skills: string[]; goal: string; weeklyHours: number; careerTrackId: string; experienceLevel: string; assignmentMode: string; projectId?: string; requestNote?: string }) {
+    return this.request<JourneyState>('/journey', { method: 'PUT', body: JSON.stringify(body) });
+  }
+  async uploadResume(file: File) {
+    const body = new FormData(); body.append('file', file);
+    return this.request<{ fileName: string; skills: string[]; summary: string; parser: string; warning: string }>('/journey/resume', { method: 'POST', body });
+  }
+  async assessJourney(answers: number[], solution: string) {
+    return this.request<{ score: number; level: string; feedback: string }>('/journey/assessment', { method: 'POST', body: JSON.stringify({ answers, solution }) });
+  }
+  async completeJourney(projectId: string) { return this.request<JourneyState>('/journey/complete', { method: 'POST', body: JSON.stringify({ projectId }) }); }
+  async getAssignmentRequests() { return this.request<AssignmentRequest[]>('/super-admin/assignment-requests'); }
+  async reviewAssignment(userId: string, body: { projectId: string; approve: boolean; note: string }) { return this.request<JourneyState>(`/super-admin/assignment-requests/${userId}/review`, { method: 'POST', body: JSON.stringify(body) }); }
+  async nextSprint() { return this.request<{ difficulty: string; reason: string }>('/journey/next-sprint', { method: 'POST' }); }
+  async getEvidence() { return this.request<Evidence>('/journey/evidence'); }
+  async getTicketHint(enrollmentId: string, ticketId: string) { return this.request<{ hint: string; hintsUsed: number }>(`/enrollments/${enrollmentId}/tickets/${ticketId}/hint`, { method: 'POST' }); }
+  async register(body: { name: string; email: string; password: string }) {
     return this.request<{
       token: string;
       tokenType: string;
@@ -285,7 +303,7 @@ class ApiClient {
   }
 
   async createProject(body: {
-    companyId: string;
+    companyId?: string;
     careerTrackId: string;
     name: string;
     slug: string;
@@ -297,7 +315,7 @@ class ApiClient {
   }) {
     return this.request<Project>('/admin/projects', {
       method: 'POST',
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, technologies: body.technologyNames }),
     });
   }
 }

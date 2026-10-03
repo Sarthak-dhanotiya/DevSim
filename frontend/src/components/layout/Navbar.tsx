@@ -42,7 +42,7 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/90 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-14">
+        <div className="flex flex-wrap items-center justify-between min-h-14 py-2 gap-2">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <div className="w-7 h-7 rounded bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center font-bold">
@@ -99,7 +99,7 @@ export function Navbar() {
           </nav>
 
           {/* Right Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Developer Portfolio Button */}
             <button
               onClick={() => setIsDevModalOpen(true)}
@@ -144,7 +144,7 @@ export function Navbar() {
                   </Button>
                 </Link>
 
-                <Link href="/profile">
+                <Link href="/profile" className="hidden sm:block">
                   <Button
                     variant={pathname === '/profile' ? 'primary' : 'outline'}
                     size="sm"
@@ -178,6 +178,11 @@ export function Navbar() {
             )}
           </div>
         </div>
+        <nav aria-label="Mobile navigation" className="md:hidden flex items-center gap-1 overflow-x-auto pb-2">
+          {navLinks.map(link => <Link key={link.href} href={link.href} className={`shrink-0 rounded-lg px-3 py-2 text-xs transition-colors ${pathname.startsWith(link.href) ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300' : 'text-slate-500 hover:bg-violet-500/10'}`}>{link.label}</Link>)}
+          {user && <><Link href="/workspace" className="shrink-0 rounded-lg px-3 py-2 text-xs text-violet-500">Workspace</Link><Link href="/profile" className="shrink-0 rounded-lg px-3 py-2 text-xs text-slate-500">Profile</Link></>}
+          {user && user.role === 'SUPER_ADMIN' && <Link href="/super-admin" className="shrink-0 rounded-lg px-3 py-2 text-xs text-violet-500">Admin</Link>}
+        </nav>
       </div>
 
       <DeveloperProfileModal

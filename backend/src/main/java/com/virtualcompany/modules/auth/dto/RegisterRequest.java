@@ -22,6 +22,7 @@ public class RegisterRequest {
     @Email(message = "Please provide a valid email address")
     private String email;
 
-    // Optional: if not provided, backend automatically generates a secure password and emails it
+    @NotBlank(message = "Choose a password for your account")
+    @Size(min = 8, max = 72, message = "Password must contain 8 to 72 characters")
     private String password;
 }

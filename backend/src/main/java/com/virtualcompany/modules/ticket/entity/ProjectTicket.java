@@ -70,6 +70,9 @@ public class ProjectTicket {
     @Builder.Default
     private String difficultyLevel = "MEDIUM";
 
+    @Column(nullable = false, length = 30)
+    @Builder.Default private String generationSource = "CURATED";
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

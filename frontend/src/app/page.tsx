@@ -13,11 +13,11 @@ import {
 
 export default function LandingPage() {
   return (
-    <div className="space-y-16 py-12">
+    <div className="page-enter space-y-16 py-12">
       {/* 1. HERO SECTION */}
-      <section className="max-w-4xl mx-auto px-4 text-center pt-8">
+      <section className="max-w-4xl mx-auto px-6 text-center pt-8 pb-8 rounded-3xl bg-gradient-to-b from-violet-500/10 to-transparent">
         <Badge variant="default" size="md">
-          Phase 1 Foundation
+          Your engineering journey starts here
         </Badge>
 
         <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-slate-900 dark:text-white mt-4 leading-tight">
@@ -71,7 +71,7 @@ export default function LandingPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="p-5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+          <div className="surface-card lift-card p-5">
             <span className="text-xs font-mono font-bold text-slate-400">01</span>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mt-1 mb-1">Select Track</h3>
             <p className="text-xs text-slate-500 leading-relaxed">
@@ -79,7 +79,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="p-5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+          <div className="surface-card lift-card p-5">
             <span className="text-xs font-mono font-bold text-slate-400">02</span>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mt-1 mb-1">Join Company</h3>
             <p className="text-xs text-slate-500 leading-relaxed">
@@ -87,7 +87,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="p-5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+          <div className="surface-card lift-card p-5">
             <span className="text-xs font-mono font-bold text-slate-400">03</span>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mt-1 mb-1">Enroll in Project</h3>
             <p className="text-xs text-slate-500 leading-relaxed">
@@ -95,7 +95,7 @@ export default function LandingPage() {
             </p>
           </div>
 
-          <div className="p-5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+          <div className="surface-card lift-card p-5">
             <span className="text-xs font-mono font-bold text-slate-400">04</span>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mt-1 mb-1">Track Progress</h3>
             <p className="text-xs text-slate-500 leading-relaxed">

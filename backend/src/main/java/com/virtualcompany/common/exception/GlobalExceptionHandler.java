@@ -18,6 +18,11 @@ import java.util.List;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<java.util.Map<String, String>> handleLargeUpload() {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(java.util.Map.of("message", "Upload a resume smaller than 5 MB."));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationException(
             MethodArgumentNotValidException ex,

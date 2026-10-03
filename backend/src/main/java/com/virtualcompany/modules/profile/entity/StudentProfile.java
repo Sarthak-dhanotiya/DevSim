@@ -59,6 +59,9 @@ public class StudentProfile {
     @JoinColumn(name = "selected_career_track_id")
     private CareerTrack selectedCareerTrack;
 
+    @Column(name = "onboarding_completed", nullable = false)
+    private boolean onboardingCompleted;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

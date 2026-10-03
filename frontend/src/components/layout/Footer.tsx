@@ -10,7 +10,8 @@ export function Footer() {
             <span>— Virtual Software Company Platform</span>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap justify-center items-center gap-6">
+            <Link href="/portfolio" className="text-violet-500 hover:text-violet-400 transition-colors">Meet the creator</Link>
             <Link href="/career-tracks" className="hover:text-slate-900 dark:hover:text-white transition-colors">
               Tracks
             </Link>

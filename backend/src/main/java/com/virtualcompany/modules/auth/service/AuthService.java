@@ -52,10 +52,7 @@ public class AuthService {
             throw new DuplicateResourceException("An account with email '" + normalizedEmail + "' already exists. Please sign in or use forgot password.");
         }
 
-        // If user didn't provide a password, generate a secure temporary password
-        String rawPassword = (request.getPassword() != null && !request.getPassword().isBlank())
-                ? request.getPassword().trim()
-                : generateSecurePassword();
+        String rawPassword = request.getPassword();
 
         User user = User.builder()
                 .email(normalizedEmail)
@@ -72,13 +69,6 @@ public class AuthService {
                 .build();
 
         StudentProfile savedProfile = profileRepository.save(profile);
-
-        // Send welcome email with credentials
-        try {
-            emailService.sendWelcomeCredentialsEmail(normalizedEmail, request.getName().trim(), rawPassword);
-        } catch (Exception e) {
-            log.error("Failed to send welcome credentials email: {}", e.getMessage());
-        }
 
         UserPrincipal principal = UserPrincipal.create(savedUser);
         String token = tokenProvider.generateToken(principal);

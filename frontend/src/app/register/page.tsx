@@ -1,145 +1,19 @@
-'use client';
-
+﻿'use client';
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/Button';
-import { api } from '@/lib/api/client';
-import { Terminal, AlertCircle, CheckCircle2, Mail, ArrowRight } from 'lucide-react';
+import { useAuth } from '@/lib/auth/AuthContext';
+import { ArrowRight, Terminal } from 'lucide-react';
 
 export default function RegisterPage() {
-  const router = useRouter();
-
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successEmail, setSuccessEmail] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-
-    try {
-      await api.register({
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-      });
-      setSuccessEmail(email.trim().toLowerCase());
-    } catch (err: any) {
-      setError(err?.message || 'Registration failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-[75vh] flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-6">
-          <div className="w-9 h-9 rounded bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center font-bold mx-auto mb-3">
-            <Terminal className="w-4 h-4" />
-          </div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Create Account</h1>
-          <p className="text-xs text-slate-500 mt-1">Join simulated software engineering teams</p>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 shadow-sm">
-          {successEmail ? (
-            <div className="text-center py-4 space-y-4">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto border border-emerald-200 dark:border-emerald-800">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Registration Successful!
-                </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
-                  Your developer credentials and password have been sent to:
-                </p>
-                <div className="mt-1 px-3 py-1.5 rounded bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs font-mono font-medium text-slate-900 dark:text-white">
-                  {successEmail}
-                </div>
-                <p className="text-[11px] text-slate-500 mt-2">
-                  Check your inbox for your login password.
-                </p>
-              </div>
-
-              <div className="pt-2">
-                <Link href="/login">
-                  <Button variant="primary" className="w-full text-xs flex items-center justify-center gap-1.5">
-                    Proceed to Sign In <ArrowRight className="w-3.5 h-3.5" />
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <>
-              {error && (
-                <div className="mb-4 p-3 rounded bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Arjun Sharma"
-                    className="w-full px-3 py-2 rounded-md bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-1 focus:ring-slate-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="developer@college.edu"
-                    className="w-full px-3 py-2 rounded-md bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-1 focus:ring-slate-400 font-mono"
-                  />
-                </div>
-
-                <div className="p-3 rounded-md bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 flex items-start gap-2">
-                  <Mail className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                  <span>
-                    Your password will be securely generated and sent to your email. You can change it anytime.
-                  </span>
-                </div>
-
-                <Button
-                  type="submit"
-                  variant="primary"
-                  loading={loading}
-                  className="w-full py-2 text-xs mt-2"
-                >
-                  Send Login Credentials
-                </Button>
-              </form>
-
-              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500">
-                Already have an account?{' '}
-                <Link href="/login" className="text-slate-900 dark:text-white font-medium hover:underline">
-                  Sign In
-                </Link>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  const router = useRouter(); const { register } = useAuth();
+  const [name, setName] = useState(''); const [email, setEmail] = useState(''); const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false); const [error, setError] = useState('');
+  async function submit(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setError('');
+    try { await register(name.trim(), email.trim().toLowerCase(), password); router.replace('/onboarding'); }
+    catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  }
+  const input = 'mt-2 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40';
+  return <main className="mx-auto flex min-h-[75vh] max-w-md items-center px-5 py-14"><div className="w-full"><Terminal className="mb-5 rounded-lg bg-slate-900 p-2 text-white" size={40} /><h1 className="text-3xl font-bold">Start your engineering journey.</h1><p className="mt-3 text-sm leading-6 text-slate-500">Create your account, confirm your skills and find a project that fits your next step.</p><form onSubmit={submit} className="mt-7 space-y-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6">{error && <p role="alert" className="rounded-lg bg-red-50 dark:bg-red-950/40 p-3 text-sm text-red-600">{error}</p>}<label className="block text-sm font-medium">Full name<input autoComplete="name" className={input} required minLength={2} maxLength={150} value={name} onChange={e => setName(e.target.value)} /></label><label className="block text-sm font-medium">Email<input autoComplete="email" type="email" className={input} required value={email} onChange={e => setEmail(e.target.value)} /></label><label className="block text-sm font-medium">Password<input autoComplete="new-password" type="password" className={input} required minLength={8} maxLength={72} value={password} onChange={e => setPassword(e.target.value)} /><span className="mt-2 block text-xs font-normal text-slate-500">Use 8-72 characters. You'll use this password to log in.</span></label><button disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Creating account…' : 'Create account'}<ArrowRight size={16} /></button></form><p className="mt-5 text-center text-sm text-slate-500">Already registered? <Link href="/login" className="font-semibold text-indigo-600">Sign in</Link></p></div></main>;
 }

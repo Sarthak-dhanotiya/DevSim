@@ -45,6 +45,7 @@ public class SuperAdminService {
     private final StudentTicketProgressRepository progressRepository;
     private final EnrollmentService enrollmentService;
     private final AiTaskGenerationService aiTaskGenerationService;
+    private final com.virtualcompany.modules.journey.JourneyRepository journeys;
 
     @Transactional(readOnly = true)
     public SuperAdminStatsResponse getStats() {
@@ -141,6 +142,11 @@ public class SuperAdminService {
 
         // Enroll user in project
         enrollmentService.enroll(userId, new EnrollProjectRequest(request.getProjectId()));
+        journeys.findByUserId(userId).ifPresent(journey -> {
+            journey.setPreferredProjectId(request.getProjectId());
+            if (profileRepository.findByUserId(userId).orElseThrow().isOnboardingCompleted()) journey.setStatus("ASSIGNED");
+            journeys.save(journey);
+        });
 
         // If requested, generate dynamic AI tasks immediately for this user!
         if (request.isAutoGenerateAiTasks()) {

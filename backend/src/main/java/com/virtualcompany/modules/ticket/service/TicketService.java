@@ -35,7 +35,7 @@ public class TicketService {
     @Transactional(readOnly = true)
     public List<TicketResponse> getProjectTickets(UUID projectId) {
         List<ProjectTicket> tickets = ticketRepository.findByProjectIdOrderByOrderIndexAsc(projectId);
-        return tickets.stream()
+        return tickets.stream().filter(t -> t.getTargetUser() == null)
                 .map(t -> TicketResponse.fromEntity(t, null))
                 .collect(Collectors.toList());
     }
@@ -55,9 +55,7 @@ public class TicketService {
         if (projectTickets.isEmpty()) {
             projectTickets = ticketRepository.findByProjectIdAndTargetUserIsNullOrderByOrderIndexAsc(projectId);
         }
-        if (projectTickets.isEmpty()) {
-            projectTickets = ticketRepository.findByProjectIdOrderByOrderIndexAsc(projectId);
-        }
+
         List<StudentTicketProgress> existingProgress = progressRepository.findByEnrollmentId(enrollmentId);
 
         Map<UUID, StudentTicketProgress> progressMap = existingProgress.stream()
@@ -122,6 +120,8 @@ public class TicketService {
         ProjectTicket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new ResourceNotFoundException("ProjectTicket", "id", ticketId));
 
+        if (!ticket.getProject().getId().equals(enrollment.getProject().getId()) || (ticket.getTargetUser() != null && !ticket.getTargetUser().getId().equals(enrollment.getStudent().getUser().getId()))) throw new BadRequestException("Ticket does not belong to this workspace.");
+
         StudentTicketProgress progress = progressRepository
                 .findByEnrollmentIdAndTicketId(enrollmentId, ticketId)
                 .orElseGet(() -> StudentTicketProgress.builder()
@@ -132,13 +132,24 @@ public class TicketService {
 
         TicketStatus newStatus = request.getStatus();
 
+        if (progress.getStatus() == TicketStatus.DONE) {
+            if (newStatus == TicketStatus.IN_PROGRESS) {
+                // Allow student to reopen ticket to practice or re-test
+                progress.setStatus(TicketStatus.IN_PROGRESS);
+                progress.setReviewApproved(false);
+                progress.setCompletedAt(null);
+            } else {
+                throw new BadRequestException("Completed submissions cannot be edited or modified while marked DONE. Reopen first to revise.");
+            }
+        }
+
         if (request.getSubmissionNotes() != null) {
             progress.setSubmissionNotes(request.getSubmissionNotes().trim());
         }
 
         if (newStatus == TicketStatus.DONE) {
             // Workflow Gate: Student cannot manually bypass code review to mark ticket DONE
-            if (progress.getAiReviewFeedback() == null || !progress.getAiReviewFeedback().contains("APPROVED")) {
+            if (!progress.isReviewApproved()) {
                 throw new BadRequestException("Ticket cannot be marked DONE without passing AI Tech Lead Code Review.");
             }
             progress.setStatus(TicketStatus.DONE);
@@ -146,6 +157,9 @@ public class TicketService {
         } else if (newStatus == TicketStatus.IN_REVIEW) {
             // Strict Tech Lead code review
             AiTechLeadService.CodeReviewResult reviewResult = aiTechLeadService.evaluateSubmission(ticket, progress.getSubmissionNotes());
+            progress.setReviewAttempts(progress.getReviewAttempts() + 1);
+            progress.setReviewScore(reviewResult.score());
+            progress.setReviewApproved(reviewResult.approved());
             progress.setAiReviewFeedback(reviewResult.feedbackMarkdown());
 
             if (reviewResult.approved()) {
@@ -163,7 +177,8 @@ public class TicketService {
                     String cleanTitle = ticket.getTitle().toLowerCase()
                             .replaceAll("[^a-z0-9]+", "-")
                             .replaceAll("^-|-$", "");
-                    progress.setBranchName("feature/" + ticket.getTicketKey().toLowerCase() + "-" + cleanTitle);
+                    String branch = "feature/" + ticket.getTicketKey().toLowerCase() + "-" + cleanTitle;
+                    progress.setBranchName(branch.substring(0, Math.min(branch.length(), 150)));
                 }
             }
         }

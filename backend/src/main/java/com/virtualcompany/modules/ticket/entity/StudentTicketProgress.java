@@ -55,6 +55,11 @@ public class StudentTicketProgress {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    private Integer reviewScore;
+    @Builder.Default private int reviewAttempts = 0;
+    @Builder.Default private int hintsUsed = 0;
+    @Builder.Default private boolean reviewApproved = false;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

@@ -19,7 +19,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/admin/career-tracks")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
 @Tag(name = "Admin - Career Tracks", description = "Admin management for career tracks")
 @SecurityRequirement(name = "BearerAuth")
 public class AdminCareerTrackController {

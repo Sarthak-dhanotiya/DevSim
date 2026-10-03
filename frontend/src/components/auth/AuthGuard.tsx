@@ -1,18 +1,21 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth/AuthContext';
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const needsOnboarding = user?.role === 'STUDENT' && !user.profile?.onboardingCompleted && pathname !== '/onboarding';
 
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
     }
-  }, [user, loading, router]);
+    if (!loading && needsOnboarding) router.replace('/onboarding');
+  }, [user, loading, router, needsOnboarding]);
 
   if (loading) {
     return (
@@ -23,7 +26,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) {
+  if (!user || needsOnboarding) {
     return null;
   }
 

@@ -13,6 +13,7 @@ import {
   ProjectTicket,
   Role,
 } from '@/lib/types';
+import { AssignmentRequests } from '@/components/common/AssignmentRequests';
 import { Button } from '@/components/ui/Button';
 import {
   ShieldCheck,
@@ -265,7 +266,7 @@ export default function SuperAdminPage() {
       setSubmittingProject(true);
       const techs = newProjTechs.split(',').map((t) => t.trim()).filter(Boolean);
       await api.createProject({
-        companyId: newProjCompanyId,
+        companyId: newProjCompanyId || undefined,
         careerTrackId: newProjTrackId,
         name: newProjName,
         slug: newProjSlug.toLowerCase().replace(/\s+/g, '-'),
@@ -487,6 +488,7 @@ export default function SuperAdminPage() {
         {/* ========================================================================= */}
         {/* TAB 1: USERS & DYNAMIC ASSIGNMENT                                         */}
         {/* ========================================================================= */}
+        {user?.role === 'SUPER_ADMIN' && <AssignmentRequests projects={projects} onReviewed={fetchData} />}
         {activeTab === 'users' && (
           <div className="space-y-4">
             {/* Search and Filter Controls */}
@@ -800,7 +802,7 @@ export default function SuperAdminPage() {
                 <h2 className="text-base font-bold text-white">Create Project & Tech Stack</h2>
               </div>
               <p className="text-xs text-slate-400 mb-4">
-                Bind an engineering codebase simulation to a company and career track.
+                Create a standalone project or optionally attach a company. Include business requirements and milestones in the brief.
               </p>
 
               <form onSubmit={handleCreateProject} className="space-y-3">
@@ -808,12 +810,11 @@ export default function SuperAdminPage() {
                   <div>
                     <label className="block text-xs font-medium text-slate-300 mb-1">Company</label>
                     <select
-                      required
                       value={newProjCompanyId}
                       onChange={(e) => setNewProjCompanyId(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
                     >
-                      <option value="">Select Company...</option>
+                      <option value="">Independent project (no company)</option>
                       {companies.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name} ({c.industry})

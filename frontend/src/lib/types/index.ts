@@ -48,6 +48,7 @@ export interface Project {
 }
 
 export interface StudentProfile {
+  onboardingCompleted: boolean;
   id: string;
   userId: string;
   name: string;
@@ -72,6 +73,10 @@ export interface Enrollment {
 }
 
 export interface ProjectTicket {
+  generationSource?: string;
+  reviewScore?: number;
+  reviewAttempts?: number;
+  hintsUsed?: number;
   id: string;
   ticketKey: string;
   title: string;

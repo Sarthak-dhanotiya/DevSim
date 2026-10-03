@@ -25,13 +25,20 @@ import java.util.List;
 public class EnrollmentController {
 
     private final EnrollmentService enrollmentService;
+    private final com.virtualcompany.modules.profile.repository.StudentProfileRepository profiles;
+    private final com.virtualcompany.modules.journey.JourneyRepository journeys;
 
     @PostMapping
+    @org.springframework.transaction.annotation.Transactional
     @Operation(summary = "Enroll into a project (sets to IN_PROGRESS)")
     public ResponseEntity<ApiResponse<EnrollmentResponse>> enroll(
             @AuthenticationPrincipal UserPrincipal currentUser,
             @Valid @RequestBody EnrollProjectRequest request
     ) {
+        var profile = profiles.findByUserId(currentUser.getId()).orElseThrow();
+        var journey = journeys.findByUserId(currentUser.getId()).orElse(null);
+        if (!profile.isOnboardingCompleted() || journey == null || !journey.getStatus().equals("ASSIGNED")) throw new com.virtualcompany.common.exception.BadRequestException("Complete onboarding and receive an assignment first.");
+        if (!request.getProjectId().equals(journey.getPreferredProjectId())) throw new com.virtualcompany.common.exception.BadRequestException("You already have an assigned project. Ask your admin to change the assignment.");
         EnrollmentResponse response = enrollmentService.enroll(currentUser.getId(), request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created("Enrolled into project successfully", response));

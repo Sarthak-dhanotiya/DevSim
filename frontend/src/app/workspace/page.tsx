@@ -7,6 +7,8 @@ import { useAuth } from '@/lib/auth/AuthContext';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { Button } from '@/components/ui/Button';
 import { Badge, DifficultyBadge, PriorityBadge } from '@/components/ui/Badge';
+import { JourneyProgress } from '@/components/common/JourneyProgress';
+import { TicketSupport } from '@/components/common/TicketSupport';
 import { api } from '@/lib/api/client';
 import {
   Enrollment,
@@ -174,6 +176,13 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 };
 
 function getStarterTemplate(ticket?: ProjectTicket | null): StarterTemplate {
+  if (ticket?.generationSource === 'BUILT_IN' || ticket?.targetUserId) {
+    const desc = (ticket.description || '').toLowerCase();
+    const guide = 'Implement the business requirement in your project repository. Replace the placeholder below, add tests and submit implementation plus test code.';
+    if (desc.includes('react') || desc.includes('typescript') || desc.includes('javascript')) return { filename: 'solution.tsx', guide, skeleton: 'export function ResourceList() {\n  // Replace this with your implementation and add tests.\n  throw new Error("Not implemented");\n}\n' };
+    if (desc.includes('python') || desc.includes('django')) return { filename: 'solution.py', guide, skeleton: 'def handle_resources(data):\n    # Replace this with your implementation and add tests.\n    raise NotImplementedError()\n' };
+    return { filename: 'Solution.java', guide, skeleton: 'public class Solution {\n    public Object execute(Object input) {\n        // Replace this with your implementation and add tests.\n        throw new UnsupportedOperationException("Not implemented");\n    }\n}\n' };
+  }
   if (!ticket) {
     return {
       filename: 'Solution.java',
@@ -569,6 +578,7 @@ function WorkspaceContent() {
   if (!workspace || !currentEnrollment) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center">
+        <JourneyProgress />
         <div className="p-8 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 space-y-4">
           <Briefcase className="w-10 h-10 text-slate-400 mx-auto" />
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">
@@ -590,12 +600,13 @@ function WorkspaceContent() {
   const tickets = workspace.tickets || [];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <div className="page-enter max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <JourneyProgress onSprint={loadWorkspace} />
       {/* 1. TOP WORKSPACE BAR */}
       <div className="p-5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-500 font-mono mb-1">
-            <span>{workspace.company?.name}</span>
+            <span>{workspace.company?.name || "Independent project"}</span>
             <span>/</span>
             <span className="text-slate-900 dark:text-white font-medium">{workspace.project?.name}</span>
             <span>/</span>
@@ -605,7 +616,7 @@ function WorkspaceContent() {
             Engineering Workspace
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Role: <strong>Java Backend Engineer</strong> • Company: <strong>{workspace.company?.name}</strong>
+            Track: <strong>{workspace.project.careerTrack?.name || "Software Engineering"}</strong> • Company: <strong>{workspace.company?.name || "Independent project"}</strong>
           </p>
         </div>
 
@@ -621,7 +632,7 @@ function WorkspaceContent() {
             </div>
             <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
               <div
-                className="bg-slate-900 dark:bg-slate-200 h-full rounded-full transition-all duration-300"
+                className="progress-fill h-full rounded-full"
                 style={{ width: `${workspace.progressPercentage}%` }}
               />
             </div>
@@ -682,7 +693,7 @@ function WorkspaceContent() {
                     <div
                       key={ticket.id}
                       onClick={() => openTicketModal(ticket)}
-                      className="p-3.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-400 dark:hover:border-slate-600 transition-colors cursor-pointer shadow-none space-y-2.5"
+                      className="p-3.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-400 dark:hover:border-slate-600 transition-all duration-200 motion-safe:hover:-translate-y-1 hover:shadow-lg hover:shadow-violet-500/5 cursor-pointer shadow-none space-y-2.5"
                     >
                       {/* Ticket Key & Priority */}
                       <div className="flex items-center justify-between">
@@ -748,6 +759,7 @@ function WorkspaceContent() {
               </h3>
             </div>
 
+            <TicketSupport key={selectedTicket.id} ticket={selectedTicket} enrollmentId={workspace.enrollmentId} />
             {/* Interactive Tab Navigation */}
             <div className="px-5 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2 text-xs font-medium">
               <button
@@ -950,7 +962,7 @@ function WorkspaceContent() {
                                 Ticket Merged & Completed!
                               </h4>
                               <p className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">
-                                Alex Mitchell approved your Pull Request and merged it into main. Sprint progress updated!
+                                Submission passed the simulation review. Sprint progress updated. Run tests in your repository to verify the implementation.
                               </p>
                             </div>
                           </div>

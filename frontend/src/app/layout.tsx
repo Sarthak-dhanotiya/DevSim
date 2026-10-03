@@ -4,6 +4,7 @@ import { AuthProvider } from '@/lib/auth/AuthContext';
 import { ThemeProvider } from '@/lib/theme/ThemeContext';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
+import { OnboardingGate } from '@/components/auth/OnboardingGate';
 
 export const metadata: Metadata = {
   title: 'DevSim | Virtual Software Company Platform',
@@ -22,7 +23,7 @@ export default function RootLayout({
         <ThemeProvider>
           <AuthProvider>
             <Navbar />
-            <main className="flex-1">{children}</main>
+            <main className="flex-1"><OnboardingGate>{children}</OnboardingGate></main>
             <Footer />
           </AuthProvider>
         </ThemeProvider>

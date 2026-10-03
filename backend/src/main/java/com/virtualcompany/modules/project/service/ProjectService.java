@@ -67,7 +67,7 @@ public class ProjectService {
             throw new DuplicateResourceException("Project with slug '" + request.getSlug() + "' already exists");
         }
 
-        VirtualCompany company = companyRepository.findById(request.getCompanyId())
+        VirtualCompany company = request.getCompanyId() == null ? null : companyRepository.findById(request.getCompanyId())
                 .orElseThrow(() -> new ResourceNotFoundException("VirtualCompany", "id", request.getCompanyId()));
 
         CareerTrack track = careerTrackRepository.findById(request.getCareerTrackId())
@@ -108,7 +108,7 @@ public class ProjectService {
             throw new DuplicateResourceException("Project with slug '" + request.getSlug() + "' already exists");
         }
 
-        VirtualCompany company = companyRepository.findById(request.getCompanyId())
+        VirtualCompany company = request.getCompanyId() == null ? null : companyRepository.findById(request.getCompanyId())
                 .orElseThrow(() -> new ResourceNotFoundException("VirtualCompany", "id", request.getCompanyId()));
 
         CareerTrack track = careerTrackRepository.findById(request.getCareerTrackId())

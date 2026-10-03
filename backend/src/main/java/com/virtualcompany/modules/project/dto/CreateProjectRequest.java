@@ -19,7 +19,6 @@ import java.util.UUID;
 @AllArgsConstructor
 public class CreateProjectRequest {
 
-    @NotNull(message = "Company ID is required")
     private UUID companyId;
 
     @NotNull(message = "Career Track ID is required")

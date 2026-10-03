@@ -19,7 +19,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/admin/companies")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
 @Tag(name = "Admin - Virtual Companies", description = "Admin management for virtual companies")
 @SecurityRequirement(name = "BearerAuth")
 public class AdminCompanyController {

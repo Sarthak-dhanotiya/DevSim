@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth/AuthContext';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { Button } from '@/components/ui/Button';
 import { Badge, DifficultyBadge, StatusBadge } from '@/components/ui/Badge';
+import { JourneyProgress } from '@/components/common/JourneyProgress';
 import { api } from '@/lib/api/client';
 import { CareerTrack, Enrollment, Project, VirtualCompany, WorkspaceData } from '@/lib/types';
 import {
@@ -17,6 +18,9 @@ import {
   UserCheck,
   Kanban,
   CheckCircle2,
+  Sparkles,
+  ArrowUpRight,
+  Target,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -72,6 +76,7 @@ function DashboardContent() {
     loadDashboardData();
   }, []);
 
+  if (loading) return <div className="max-w-5xl mx-auto px-4 py-10 space-y-6" aria-label="Loading dashboard" role="status"><div className="skeleton h-48" /><div className="grid grid-cols-2 sm:grid-cols-4 gap-4">{[0,1,2,3].map(i => <div key={i} className="skeleton h-28" />)}</div><div className="skeleton h-64" /><span className="sr-only">Loading your dashboard...</span></div>;
   const profile = user?.profile;
   const profileFields = [
     Boolean(profile?.name),
@@ -86,35 +91,22 @@ function DashboardContent() {
   const completionPercentage = Math.round((completedFieldsCount / profileFields.length) * 100);
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-      {/* 1. WELCOME SECTION */}
-      <div className="p-6 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <span className="text-[11px] font-mono text-slate-500 uppercase tracking-wider block mb-1">
-            Student Dashboard
-          </span>
-          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-            Welcome, {profile?.name || user?.email?.split('@')[0] || 'Developer'}
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Simulated software engineering workspace.
-          </p>
+    <div className="dashboard-shell max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+      <JourneyProgress />
+      <section className="dashboard-hero relative overflow-hidden rounded-3xl p-7 sm:p-9">
+        <div className="ambient-orb orb-one" aria-hidden="true" /><div className="ambient-orb orb-two" aria-hidden="true" />
+        <div className="relative flex flex-col sm:flex-row justify-between gap-6">
+          <div><div className="eyebrow text-violet-300 flex items-center gap-2"><Sparkles size={14} /> YOUR ENGINEERING JOURNEY</div>
+            <h1 className="mt-4 text-3xl sm:text-4xl font-bold tracking-tight">Welcome back, {profile?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Developer'}<span className="text-violet-300">.</span></h1>
+            <p className="mt-3 text-sm leading-6 text-slate-300 max-w-md">{currentEnrollment ? 'Your next contribution is waiting. Build something you?re proud of today.' : 'Your first engineering adventure starts here. Find a project and make your first contribution.'}</p>
+            <div className="flex flex-wrap gap-3 mt-6"><Link href={currentEnrollment ? '/workspace' : '/projects'}><Button className="!bg-violet-500 hover:!bg-violet-400 !text-white rounded-xl gap-2">{currentEnrollment ? 'Continue building' : 'Find your first project'} <ArrowUpRight size={16} /></Button></Link><Link href="/profile"><Button variant="outline" className="!text-white !border-white/20 hover:!bg-white/10 rounded-xl">Your profile</Button></Link></div>
+          </div>
+          <div className="sm:self-center rounded-2xl border border-white/15 bg-white/5 p-5 sm:min-w-[170px]"><span className="eyebrow text-violet-200">SPRINT COMPLETION</span><div className="text-4xl font-bold mt-3 tracking-tight">{workspace?.progressPercentage ?? 0}<span className="text-lg text-violet-300">%</span></div><p className="text-xs text-slate-300 mt-2">{workspace?.completedTickets ?? 0} / {workspace?.totalTickets ?? 0} tickets completed</p></div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <Link href="/projects">
-            <Button size="sm" variant="primary">
-              Explore Projects
-            </Button>
-          </Link>
-          <Link href="/profile">
-            <Button size="sm" variant="outline">
-              Edit Profile
-            </Button>
-          </Link>
-        </div>
-      </div>
-
+      </section>
+      <section className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[{ icon: CheckCircle2, label: 'Completed tickets', value: workspace?.completedTickets ?? 0 }, { icon: Kanban, label: 'In progress', value: workspace?.tickets.filter(t => t.status === 'IN_PROGRESS').length ?? 0 }, { icon: Target, label: 'In review', value: workspace?.tickets.filter(t => t.status === 'IN_REVIEW').length ?? 0 }, { icon: Briefcase, label: 'Projects to explore', value: projects.length }].map(({ icon: Icon, label, value }) => <div key={label} className="surface-card lift-card p-5"><div className="flex justify-between items-center"><Icon size={18} className="text-violet-500" /><span className="text-2xl font-bold tracking-tight">{value}</span></div><p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{label}</p></div>)}
+      </section>
       {/* 2. PROFILE COMPLETION BANNER */}
       {completionPercentage < 100 && (
         <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
@@ -141,7 +133,7 @@ function DashboardContent() {
         </h2>
 
         {currentEnrollment ? (
-          <div className="p-6 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-5">
+          <div className="surface-card p-6 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 mb-1.5">
@@ -185,7 +177,7 @@ function DashboardContent() {
                 </div>
                 <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
                   <div
-                    className="bg-slate-900 dark:bg-slate-100 h-full rounded-full transition-all duration-300"
+                    className="progress-fill h-full rounded-full"
                     style={{ width: `${workspace.progressPercentage}%` }}
                   />
                 </div>
@@ -242,7 +234,7 @@ function DashboardContent() {
         </div>
 
         {profile?.selectedCareerTrack ? (
-          <div className="p-5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="surface-card lift-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-slate-900 dark:text-white">
@@ -288,7 +280,7 @@ function DashboardContent() {
           {projects.map((proj) => (
             <div
               key={proj.id}
-              className="p-5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col justify-between"
+              className="surface-card lift-card p-5 flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -335,7 +327,7 @@ function DashboardContent() {
           {companies.map((c) => (
             <div
               key={c.id}
-              className="p-5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-start gap-3.5"
+              className="surface-card lift-card p-5 flex items-start gap-3.5"
             >
               <div className="w-9 h-9 rounded bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold flex items-center justify-center text-xs shrink-0">
                 {c.name.slice(0, 2).toUpperCase()}

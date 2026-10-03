@@ -36,6 +36,13 @@ public class EnrollmentService {
         Project project = projectRepository.findById(request.getProjectId())
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", request.getProjectId()));
 
+        if (!project.isActive()) throw new com.virtualcompany.common.exception.BadRequestException("Project is inactive.");
+        for (var other : enrollmentRepository.findByStudentId(student.getId())) {
+            if (!other.getProject().getId().equals(project.getId()) && other.getStatus() == EnrollmentStatus.IN_PROGRESS) {
+                other.setStatus(EnrollmentStatus.NOT_STARTED); enrollmentRepository.save(other);
+            }
+        }
+
         // Check if student already has an enrollment for this project
         Optional<StudentProjectEnrollment> existing = enrollmentRepository
                 .findByStudentIdAndProjectId(student.getId(), project.getId());

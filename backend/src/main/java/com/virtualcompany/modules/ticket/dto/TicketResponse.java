@@ -18,6 +18,10 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TicketResponse {
+    private String generationSource;
+    private Integer reviewScore;
+    private int reviewAttempts;
+    private int hintsUsed;
     private UUID id;
     private String ticketKey;
     private String title;
@@ -41,6 +45,7 @@ public class TicketResponse {
 
     public static TicketResponse fromEntity(ProjectTicket ticket, StudentTicketProgress progress) {
         TicketResponse.TicketResponseBuilder builder = TicketResponse.builder()
+                .generationSource(ticket.getGenerationSource())
                 .id(ticket.getId())
                 .ticketKey(ticket.getTicketKey())
                 .title(ticket.getTitle())
@@ -56,7 +61,7 @@ public class TicketResponse {
                 .status(progress != null ? progress.getStatus() : TicketStatus.TODO);
 
         if (progress != null) {
-            builder.branchName(progress.getBranchName())
+            builder.reviewScore(progress.getReviewScore()).reviewAttempts(progress.getReviewAttempts()).hintsUsed(progress.getHintsUsed()).branchName(progress.getBranchName())
                     .submissionNotes(progress.getSubmissionNotes())
                     .aiReviewFeedback(progress.getAiReviewFeedback())
                     .startedAt(progress.getStartedAt())

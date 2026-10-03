@@ -15,6 +15,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class StudentProfileResponse {
+    private boolean onboardingCompleted;
     private UUID id;
     private UUID userId;
     private String name;
@@ -31,6 +32,7 @@ public class StudentProfileResponse {
     public static StudentProfileResponse fromEntity(StudentProfile profile) {
         if (profile == null) return null;
         return StudentProfileResponse.builder()
+                .onboardingCompleted(profile.isOnboardingCompleted())
                 .id(profile.getId())
                 .userId(profile.getUser() != null ? profile.getUser().getId() : null)
                 .name(profile.getName())
