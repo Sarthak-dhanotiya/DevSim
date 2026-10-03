@@ -178,6 +178,9 @@ public class EmailService {
                 }
 
                 // 2. Try SMTP if mail credentials configured
+                log.info("📧 Email dispatch evaluation: mailSender.isPresent()={}, mailUsername='{}'",
+                        mailSender.isPresent(), mailUsername);
+
                 if (mailSender.isPresent() && mailUsername != null && !mailUsername.isBlank()) {
                     sendViaSmtp(toEmail, subject, htmlContent);
                     return;
