@@ -240,6 +240,43 @@ public class GlobalExceptionHandler {
     };
   }
 
+  if (
+    title.includes('rest') ||
+    title.includes('api') ||
+    title.includes('controller') ||
+    title.includes('endpoint') ||
+    title.includes('pagin') ||
+    title.includes('filter') ||
+    criteria.includes('pageable') ||
+    criteria.includes('pageresponse') ||
+    criteria.includes('get endpoint')
+  ) {
+    return {
+      filename: 'ManagementController.java',
+      guide: 'Implement the REST API controller with pagination (Pageable), sorting, and query parameter filtering.',
+      skeleton: `@RestController
+@RequestMapping("/api/v1/management")
+@RequiredArgsConstructor
+public class ManagementController {
+
+    private final ManagementService managementService;
+
+    // TODO: Implement GET endpoint supporting status, category, date filters, and pagination
+    @GetMapping
+    public ResponseEntity<PageResponse<ManagementItemDto>> getItems(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate,
+            @PageableDefault(page = 0, size = 20, sort = "createdAt") Pageable pageable
+    ) {
+        PageResponse<ManagementItemDto> response = managementService.findItems(category, status, startDate, endDate, pageable);
+        return ResponseEntity.ok(response);
+    }
+}`,
+    };
+  }
+
   if (title.includes('security') || title.includes('jwt') || title.includes('auth')) {
     return {
       filename: 'SecurityConfig.java',
@@ -482,6 +519,42 @@ function WorkspaceContent() {
     navigator.clipboard.writeText(`git checkout -b ${branch}`);
     setCopiedBranch(true);
     setTimeout(() => setCopiedBranch(false), 2000);
+  }
+
+  function submitCurrentSolution() {
+    if (!selectedTicket) return;
+
+    if (submissionMode === 'code') {
+      const cleaned = codeSnippet
+        .replace(/\/\/.*/g, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .trim();
+
+      const isUnmodified =
+        codeSnippet.includes('// Implement your solution logic here') ||
+        codeSnippet.includes('// Write or paste your implementation code here...') ||
+        codeSnippet.includes('public void execute() {\n        // Implement your solution logic here\n    }') ||
+        cleaned.length < 35;
+
+      if (isUnmodified) {
+        alert(
+          '⚠️ Please write or customize your Java implementation before submitting.\n\n' +
+          'Alex Mitchell (Tech Lead) reviews your code against the ticket criteria. ' +
+          'Submitting an empty starter stub will result in changes requested.'
+        );
+        return;
+      }
+    } else if (!githubPrUrl.trim()) {
+      alert('⚠️ Please provide a valid GitHub PR or commit URL.');
+      return;
+    }
+
+    const combined =
+      submissionMode === 'code'
+        ? `Code Snippet:\n${codeSnippet}\n\nDeveloper Notes:\n${submissionNotes}`
+        : `GitHub PR URL: ${githubPrUrl}\n\nDeveloper Notes:\n${submissionNotes}`;
+
+    handleStatusChange(selectedTicket, 'IN_REVIEW', combined);
   }
 
   if (loading) {
@@ -1046,26 +1119,7 @@ function WorkspaceContent() {
                                 size="sm"
                                 variant="primary"
                                 disabled={isUpdatingStatus}
-                                onClick={() => {
-                                  if (submissionMode === 'code') {
-                                    const cleaned = codeSnippet
-                                      .replace(/\/\/.*/g, '')
-                                      .replace(/\/\*[\s\S]*?\*\//g, '')
-                                      .trim();
-                                    if (!cleaned || cleaned.length < 25) {
-                                      alert('⚠️ Please write or paste your Java implementation code before submitting for Tech Lead review.');
-                                      return;
-                                    }
-                                  } else if (!githubPrUrl.trim()) {
-                                    alert('⚠️ Please provide a valid GitHub PR or commit URL.');
-                                    return;
-                                  }
-
-                                  const combined = submissionMode === 'code'
-                                    ? `Code Snippet:\n${codeSnippet}\n\nDeveloper Notes:\n${submissionNotes}`
-                                    : `GitHub PR URL: ${githubPrUrl}\n\nDeveloper Notes:\n${submissionNotes}`;
-                                  handleStatusChange(selectedTicket, 'IN_REVIEW', combined);
-                                }}
+                                onClick={submitCurrentSolution}
                                 className={`flex items-center gap-1.5 ${
                                   selectedTicket.aiReviewFeedback && !isApproved
                                     ? 'bg-amber-600 hover:bg-amber-500 text-white'
@@ -1099,16 +1153,25 @@ function WorkspaceContent() {
               )}
             </div>
 
-            {/* Modal Footer */}
+            {/* Modal Footer (Sticky at bottom so actions are always directly visible) */}
             <div className="p-3.5 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <span>Status:</span>
-                <span className="font-bold text-slate-900 dark:text-white font-mono uppercase">
+                <span
+                  className={`font-bold font-mono uppercase px-2 py-0.5 rounded text-[11px] ${
+                    selectedTicket.status === 'DONE'
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300'
+                      : selectedTicket.status === 'IN_PROGRESS'
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300'
+                      : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+                >
                   {selectedTicket.status}
                 </span>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                {/* 1. If ticket is TODO: "Start Ticket" */}
                 {selectedTicket.status === 'TODO' && (
                   <Button
                     size="sm"
@@ -1125,19 +1188,70 @@ function WorkspaceContent() {
                   </Button>
                 )}
 
+                {/* 2. If ticket is IN_PROGRESS: */}
+                {selectedTicket.status === 'IN_PROGRESS' && (
+                  <>
+                    {modalTab !== 'submit' ? (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => setModalTab('submit')}
+                        className="flex items-center gap-1.5"
+                      >
+                        <span>Go to Submit & Review</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={isUpdatingStatus}
+                        onClick={submitCurrentSolution}
+                        className={`flex items-center gap-1.5 ${
+                          selectedTicket.aiReviewFeedback && !selectedTicket.aiReviewFeedback.includes('APPROVED')
+                            ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                            : ''
+                        }`}
+                      >
+                        {isUpdatingStatus ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Reviewing...</span>
+                          </>
+                        ) : selectedTicket.aiReviewFeedback && !selectedTicket.aiReviewFeedback.includes('APPROVED') ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>Revise & Resubmit</span>
+                          </>
+                        ) : (
+                          <>
+                            <Rocket className="w-3.5 h-3.5" />
+                            <span>Submit Solution for Review</span>
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </>
+                )}
+
+                {/* 3. If ticket is DONE: "Reopen Ticket" */}
                 {selectedTicket.status === 'DONE' && (
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={isUpdatingStatus}
-                    onClick={() => handleStatusChange(selectedTicket, 'IN_PROGRESS')}
+                    onClick={() => {
+                      handleStatusChange(selectedTicket, 'IN_PROGRESS');
+                      setModalTab('submit');
+                    }}
                     className="flex items-center gap-1.5 text-xs"
                   >
                     <RefreshCw className="w-3 h-3" />
-                    <span>Reopen Ticket</span>
+                    <span>Reopen Ticket (Practice Again)</span>
                   </Button>
                 )}
 
+                {/* Ask Alex About Ticket */}
                 <Button
                   size="sm"
                   variant="outline"
@@ -1155,6 +1269,7 @@ function WorkspaceContent() {
           </div>
         </div>
       )}
+
 
       {/* 4. AI TECH LEAD CHAT DRAWER */}
       {isChatOpen && (

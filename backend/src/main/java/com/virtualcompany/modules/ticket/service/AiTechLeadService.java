@@ -384,8 +384,11 @@ public class AiTechLeadService {
     }
 
     public CodeReviewResult evaluateSubmission(ProjectTicket ticket, String submissionNotes) {
+        String rawCode = extractCodeSnippet(submissionNotes);
+        String codeWithoutComments = stripComments(rawCode);
+
         // 1. Immediate validation: Check if submission is empty, trivial, or unmodified boilerplate
-        if (isSubmissionEmptyOrTrivial(submissionNotes)) {
+        if (isUnmodifiedStarterTemplate(rawCode, codeWithoutComments)) {
             return buildEmptySubmissionResult(ticket);
         }
 
@@ -401,26 +404,51 @@ public class AiTechLeadService {
             }
         }
 
-        // 3. Fallback: Built-In Semantic & Heuristic Code Analyzer
-        return evaluateWithSmartCodeAnalyzer(ticket, submissionNotes);
+        // 3. Fallback: Built-In Semantic & Heuristic Code Analyzer (Checks real code without comments)
+        return evaluateWithSmartCodeAnalyzer(ticket, rawCode, codeWithoutComments);
     }
 
-    private boolean isSubmissionEmptyOrTrivial(String input) {
-        if (input == null || input.isBlank()) {
+    private String extractCodeSnippet(String submissionNotes) {
+        if (submissionNotes == null) return "";
+        if (submissionNotes.contains("Code Snippet:")) {
+            String after = submissionNotes.substring(submissionNotes.indexOf("Code Snippet:") + 13);
+            if (after.contains("Developer Notes:")) {
+                return after.substring(0, after.indexOf("Developer Notes:")).trim();
+            }
+            return after.trim();
+        }
+        return submissionNotes.trim();
+    }
+
+    private String stripComments(String code) {
+        if (code == null) return "";
+        return code
+                .replaceAll("(?s)/\\*.*?\\*/", "") // multi-line & JavaDoc comments
+                .replaceAll("//.*", ""); // single-line comments
+    }
+
+    private boolean isUnmodifiedStarterTemplate(String rawCode, String codeWithoutComments) {
+        if (rawCode == null || rawCode.isBlank()) return true;
+
+        String compressed = codeWithoutComments.replaceAll("\\s+", "");
+
+        // Check for template placeholder markers
+        boolean hasPlaceholderComment = rawCode.contains("// Implement your solution logic here")
+                || rawCode.contains("// Write or paste your implementation code here...")
+                || rawCode.contains("// TODO: Inject required repositories")
+                || rawCode.contains("// TODO: Implement GET endpoint");
+
+        // If only class declaration with empty execute() or empty method bodies
+        boolean onlyEmptyMethod = compressed.contains("publicvoidexecute(){}")
+                || compressed.contains("voidexecute(){}")
+                || compressed.endsWith("{}");
+
+        if (hasPlaceholderComment && onlyEmptyMethod) {
             return true;
         }
 
-        // Strip known label prefixes and comment blocks
-        String cleaned = input
-                .replaceAll("(?i)code\\s*snippet\\s*:", "")
-                .replaceAll("(?i)developer\\s*notes\\s*:", "")
-                .replaceAll("(?i)github\\s*pr\\s*(url)?\\s*:", "")
-                .replaceAll("//.*", "") // remove single-line comments
-                .replaceAll("/\\*[\\s\\S]*?\\*/", "") // remove multi-line comments
-                .replaceAll("\\s+", ""); // remove all whitespace
-
-        // If after stripping comments and labels there are fewer than 35 characters of real code
-        return cleaned.length() < 35;
+        // Must have at least 45 characters of executable code (excluding comments)
+        return compressed.length() < 45;
     }
 
     private CodeReviewResult buildEmptySubmissionResult(ProjectTicket ticket) {
@@ -439,13 +467,14 @@ public class AiTechLeadService {
                 "**Reviewer:** Alex Mitchell (Staff Software Engineer & Tech Lead @ QuickKart)\n\n" +
                 "**Verdict:** ❌ CHANGES REQUESTED (Score: 10/100)\n\n" +
                 "#### 🚫 Blocker Detected:\n" +
-                "- **No Implementation Submitted:** The editor was submitted empty or contains only comments/placeholders without executable code.\n" +
-                "- In a production engineering environment, every Pull Request must contain working, testable code that implements the ticket requirements.\n\n" +
-                "#### 📋 Required Acceptance Criteria to Pass:\n" +
+                "- **Unmodified Starter Skeleton / No Implementation:** You submitted the starter template without writing your implementation logic.\n" +
+                "- The method body is empty (`// Implement your solution logic here`), or no working code was detected.\n" +
+                "- In a production engineering environment, every Pull Request must contain working code satisfying the ticket's Acceptance Criteria.\n\n" +
+                "#### 📋 Required Acceptance Criteria to Implement:\n" +
                 checklist + "\n" +
                 "#### 💡 Next Steps:\n" +
-                "1. Switch to the **'2. Starter Guide & Code'** tab to view architectural guidance or copy a starter skeleton.\n" +
-                "2. Write your Java 21 / Spring Boot implementation in the **'In-Browser Code'** editor.\n" +
+                "1. Switch to the **'2. Starter Guide & Code'** tab to inspect the required classes and architectural guidance.\n" +
+                "2. Write your Java 21 / Spring Boot implementation inside the **'In-Browser Code'** editor.\n" +
                 "3. Click **Revise & Resubmit** when ready for re-review.";
 
         return new CodeReviewResult(false, 10, "CHANGES REQUESTED", markdown);
@@ -522,14 +551,22 @@ public class AiTechLeadService {
         );
     }
 
-    private CodeReviewResult evaluateWithSmartCodeAnalyzer(ProjectTicket ticket, String submissionNotes) {
+    private CodeReviewResult evaluateWithSmartCodeAnalyzer(ProjectTicket ticket, String rawCode, String codeWithoutComments) {
         String ticketKey = ticket.getTicketKey() != null ? ticket.getTicketKey() : "TASK";
-        String codeLower = submissionNotes.toLowerCase();
 
-        // 1. Structure check
+        // Lowercase code strictly stripped of comments
+        String codeLower = codeWithoutComments.toLowerCase();
+
+        // 1. Structure check on CODE ONLY (without comments)
         boolean hasClassOrInterface = codeLower.contains("class ") || codeLower.contains("interface ") || codeLower.contains("record ");
-        boolean hasMethods = submissionNotes.contains("(") && submissionNotes.contains(")") && submissionNotes.contains("{");
-        boolean hasAnnotations = submissionNotes.contains("@");
+        boolean hasMethods = codeWithoutComments.contains("(") && codeWithoutComments.contains(")") && codeWithoutComments.contains("{");
+        boolean hasAnnotations = codeWithoutComments.contains("@");
+        boolean hasReturnOrStatement = codeLower.contains("return ") || codeLower.contains("new ") || codeLower.contains("throw ");
+
+        // If no real statements inside code
+        if (!hasReturnOrStatement && !codeLower.contains("@getmapping") && !codeLower.contains("@restcontrolleradvice")) {
+            return buildEmptySubmissionResult(ticket);
+        }
 
         String criteria = ticket.getAcceptanceCriteria() != null ? ticket.getAcceptanceCriteria() : "";
         String[] criteriaLines = criteria.split("\\r?\\n");
@@ -549,7 +586,7 @@ public class AiTechLeadService {
 
             boolean passed = false;
 
-            // Contextual criteria checks
+            // Contextual criteria checks ON CODE ONLY (no comments)
             if (lCase.contains("valid") || lCase.contains("jakarta") || lCase.contains("notnull") || lCase.contains("notblank")) {
                 passed = codeLower.contains("@valid") || codeLower.contains("@notnull") || codeLower.contains("@notblank")
                         || codeLower.contains("@size") || codeLower.contains("@min") || codeLower.contains("bindingresult");
@@ -562,11 +599,15 @@ public class AiTechLeadService {
             } else if (lCase.contains("pagin") || lCase.contains("page") || lCase.contains("sort")) {
                 passed = codeLower.contains("pageable") || codeLower.contains("page<") || codeLower.contains("pageresponse")
                         || codeLower.contains("pagesize") || codeLower.contains("pageabledefault");
-                if (!passed) missingFeedback.add("Missing pagination parameters or Pageable support.");
-            } else if (lCase.contains("filter") || lCase.contains("category") || lCase.contains("price")) {
+                if (!passed) missingFeedback.add("Missing pagination parameters or Pageable support in your Java code.");
+            } else if (lCase.contains("filter") || lCase.contains("category") || lCase.contains("status") || lCase.contains("price")) {
                 passed = codeLower.contains("category") || codeLower.contains("price") || codeLower.contains("filter")
-                        || codeLower.contains("requestparam");
-                if (!passed) missingFeedback.add("Missing category or price query filter handling.");
+                        || codeLower.contains("status") || codeLower.contains("requestparam");
+                if (!passed) missingFeedback.add("Missing query filter parameter handling (e.g. `@RequestParam String category`, etc.).");
+            } else if (lCase.contains("endpoint") || lCase.contains("rest") || lCase.contains("get /api") || lCase.contains("api")) {
+                passed = codeLower.contains("@restcontroller") || codeLower.contains("@getmapping") || codeLower.contains("@postmapping")
+                        || codeLower.contains("@requestmapping");
+                if (!passed) missingFeedback.add("Missing REST Controller or GET endpoint mappings (`@RestController`, `@GetMapping`).");
             } else if (lCase.contains("reserv") || lCase.contains("cart") || lCase.contains("stock")) {
                 passed = codeLower.contains("stock") || codeLower.contains("reserve") || codeLower.contains("quantity")
                         || codeLower.contains("cart") || codeLower.contains("inventory");
@@ -588,7 +629,7 @@ public class AiTechLeadService {
                         || codeLower.contains("when(");
                 if (!passed) missingFeedback.add("Missing unit or integration test assertions.");
             } else {
-                // Heuristic match: check if significant words in the criteria appear in the code
+                // Heuristic match: check if significant words in the criteria appear in the code (without comments)
                 String[] words = lCase.replaceAll("[^a-z0-9]", " ").split("\\s+");
                 int matchCount = 0;
                 int significantCount = 0;
@@ -598,7 +639,7 @@ public class AiTechLeadService {
                         if (codeLower.contains(w)) matchCount++;
                     }
                 }
-                passed = (significantCount == 0) || ((double) matchCount / significantCount >= 0.4);
+                passed = (significantCount == 0) || ((double) matchCount / significantCount >= 0.5);
                 if (!passed) missingFeedback.add("Requirement incomplete: " + cleanText);
             }
 
@@ -611,19 +652,22 @@ public class AiTechLeadService {
         }
 
         // Calculate score
-        double criteriaRatio = totalCriteria > 0 ? ((double) passedCriteria / totalCriteria) : 0.5;
-        int codeLength = submissionNotes.length();
+        double criteriaRatio = totalCriteria > 0 ? ((double) passedCriteria / totalCriteria) : 0.0;
+        int codeLength = codeWithoutComments.trim().length();
 
-        int score = (int) Math.round(criteriaRatio * 75);
-        if (hasClassOrInterface) score += 10;
-        if (hasMethods) score += 8;
-        if (hasAnnotations) score += 7;
+        int score = (int) Math.round(criteriaRatio * 70);
+        if (hasClassOrInterface) score += 8;
+        if (hasMethods && hasReturnOrStatement) score += 12;
+        if (hasAnnotations) score += 8;
 
-        // Cap score
+        if (codeLength < 75 || !hasReturnOrStatement) {
+            score = Math.min(score, 25);
+        }
+
         score = Math.min(score, 98);
-        if (codeLength < 100) score = Math.min(score, 40);
 
-        boolean approved = score >= 75 && passedCriteria >= Math.max(1, (int) Math.ceil(totalCriteria * 0.70));
+        // Approval requires passing at least 70% of criteria AND score >= 75
+        boolean approved = score >= 75 && criteriaRatio >= 0.70;
 
         String specificTip = getSeniorTipForTicket(ticketKey);
 
