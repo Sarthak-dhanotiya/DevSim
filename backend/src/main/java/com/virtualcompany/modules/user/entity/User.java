@@ -18,6 +18,8 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 public class User {
+    @Column(name="email_verified",nullable=false)
+    @Builder.Default private boolean emailVerified=true;
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

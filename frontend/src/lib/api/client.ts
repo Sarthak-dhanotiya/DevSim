@@ -32,6 +32,10 @@ function getBaseUrl(): string {
 const API_BASE_URL = getBaseUrl();
 
 class ApiClient {
+  async getEmailVerification(){return this.request<{verified:boolean}>('/journey/email');}
+  async sendEmailVerification(){return this.request<{message:string}>('/journey/email/send',{method:'POST'});}
+  async verifyEmail(code:string){return this.request<{verified:boolean}>('/journey/email/verify',{method:'POST',body:JSON.stringify({code})});}
+  async skipAssessment(){return this.request<JourneyState>('/journey/assessment/skip',{method:'POST'});}
   private getToken(): string | null {
     if (typeof window === 'undefined') return null;
     return localStorage.getItem('vc_token');
@@ -65,6 +69,9 @@ class ApiClient {
     }
 
     if (!response.ok) {
+      if(response.status===404 && endpoint.startsWith('/journey/email')) {
+        throw new Error('Your local backend is an older version. In the PowerShell terminal containing your AI keys, run: powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1 -Build -RestartBackend. Wait for backend startup, then click Retry.');
+      }
       const errorMessage =
         data?.message || (data?.details ? data.details.join(', ') : 'Network request failed');
       throw new Error(errorMessage);
@@ -303,6 +310,8 @@ class ApiClient {
   }
 
   async createProject(body: {
+    githubTemplateRepo?:string;
+    githubRepoMode?:string;
     companyId?: string;
     careerTrackId: string;
     name: string;

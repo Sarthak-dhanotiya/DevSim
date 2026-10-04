@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { GitHubIntegration } from '@/components/common/GitHubIntegration';
 import { useAuth } from '@/lib/auth/AuthContext';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { Button } from '@/components/ui/Button';
@@ -103,6 +104,7 @@ function ProfileContent() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+      <GitHubIntegration />
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Student Profile</h1>
         <p className="text-xs text-slate-500 mt-1">Manage your education, links, and selected career track</p>

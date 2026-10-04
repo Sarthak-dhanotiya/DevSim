@@ -94,6 +94,8 @@ export default function SuperAdminPage() {
   const [newProjCompanyId, setNewProjCompanyId] = useState('');
   const [newProjTrackId, setNewProjTrackId] = useState('');
   const [newProjName, setNewProjName] = useState('');
+  const [newProjGithubTemplate,setNewProjGithubTemplate]=useState('');
+  const [newProjGithubMode,setNewProjGithubMode]=useState('TEMPLATE');
   const [newProjSlug, setNewProjSlug] = useState('');
   const [newProjDifficulty, setNewProjDifficulty] = useState('INTERMEDIATE');
   const [newProjDuration, setNewProjDuration] = useState('4 weeks');
@@ -266,6 +268,8 @@ export default function SuperAdminPage() {
       setSubmittingProject(true);
       const techs = newProjTechs.split(',').map((t) => t.trim()).filter(Boolean);
       await api.createProject({
+        githubTemplateRepo:newProjGithubTemplate.trim(),
+        githubRepoMode:newProjGithubMode,
         companyId: newProjCompanyId || undefined,
         careerTrackId: newProjTrackId,
         name: newProjName,
@@ -908,6 +912,7 @@ export default function SuperAdminPage() {
 
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">Short Description</label>
+                  <div className="my-4 space-y-2"><label className="block text-xs text-slate-300">GitHub starter repository (optional)</label><input value={newProjGithubTemplate} onChange={e=>setNewProjGithubTemplate(e.target.value)} placeholder="owner/repository" pattern="[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+" className="w-full rounded-lg bg-slate-900 border border-slate-700 p-3 text-white text-sm"/><select value={newProjGithubMode} onChange={e=>setNewProjGithubMode(e.target.value)} className="rounded-lg bg-slate-900 border border-slate-700 p-2 text-white text-sm"><option value="TEMPLATE">Generate from template</option><option value="FORK">Fork public repository</option></select><p className="text-xs text-slate-400">Leave empty to use the server default or a README starter. Template mode requires a GitHub template repository.</p></div>
                   <input
                     type="text"
                     required

@@ -144,7 +144,12 @@ public class SuperAdminService {
         enrollmentService.enroll(userId, new EnrollProjectRequest(request.getProjectId()));
         journeys.findByUserId(userId).ifPresent(journey -> {
             journey.setPreferredProjectId(request.getProjectId());
-            if (profileRepository.findByUserId(userId).orElseThrow().isOnboardingCompleted()) journey.setStatus("ASSIGNED");
+            var assignedProfile = profileRepository.findByUserId(userId).orElseThrow();
+            if (assignedProfile.isOnboardingCompleted() || journey.getStatus().equals("PENDING_REVIEW")) {
+                journey.setStatus("ASSIGNED");
+                assignedProfile.setOnboardingCompleted(true);
+                profileRepository.save(assignedProfile);
+            }
             journeys.save(journey);
         });
 

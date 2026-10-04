@@ -2,6 +2,26 @@ server:
   address: 0.0.0.0
   port: ${PORT:8080}
 
+github:
+  client-id: ${GITHUB_CLIENT_ID:}
+  client-secret: ${GITHUB_CLIENT_SECRET:}
+  token-key: ${GITHUB_TOKEN_KEY:}
+  callback-url: ${GITHUB_CALLBACK_URL:http://localhost:3000/github/callback}
+  webhook-url: ${GITHUB_WEBHOOK_URL:}
+  webhook-secret: ${GITHUB_WEBHOOK_SECRET:}
+  template: ${GITHUB_TEMPLATE_REPO:}
+  repo-mode: ${GITHUB_REPO_MODE:TEMPLATE}
+  bot-token: ${GITHUB_BOT_TOKEN:}
+  app-id: ${GITHUB_APP_ID:}
+  app-slug: ${GITHUB_APP_SLUG:}
+  private-key-file: ${GITHUB_APP_PRIVATE_KEY_FILE:}
+
+logging:
+  level:
+    org.springframework.web: INFO
+    org.springframework.http.converter: INFO
+    org.springframework.jdbc.core: INFO
+
 spring:
   application:
     name: virtualcompany-backend

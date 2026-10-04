@@ -73,3 +73,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 @keyframes journey-enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 .journey-enter { animation: journey-enter 0.3s ease-out; }
 @media (prefers-reduced-motion: reduce) { .journey-enter { animation: none; } }
+
+/* Personal portfolio uses an independent editorial presentation. */
+body:has(.portfolio-standalone) > header,
+body:has(.portfolio-standalone) > footer { display: none; }
+body:has(.portfolio-standalone) { background: #f5f3ed; }

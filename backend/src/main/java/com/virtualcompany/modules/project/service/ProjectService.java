@@ -84,6 +84,8 @@ public class ProjectService {
                 .estimatedDuration(request.getEstimatedDuration())
                 .active(request.isActive())
                 .technologies(new ArrayList<>())
+                .githubTemplateRepo(request.getGithubTemplateRepo())
+                .githubRepoMode(request.getGithubRepoMode()==null?"TEMPLATE":request.getGithubRepoMode())
                 .build();
 
         if (request.getTechnologies() != null) {
@@ -123,6 +125,8 @@ public class ProjectService {
         project.setDifficulty(request.getDifficulty());
         project.setEstimatedDuration(request.getEstimatedDuration());
         project.setActive(request.isActive());
+        project.setGithubTemplateRepo(request.getGithubTemplateRepo());
+        project.setGithubRepoMode(request.getGithubRepoMode()==null?"TEMPLATE":request.getGithubRepoMode());
 
         // Update technologies
         project.getTechnologies().clear();

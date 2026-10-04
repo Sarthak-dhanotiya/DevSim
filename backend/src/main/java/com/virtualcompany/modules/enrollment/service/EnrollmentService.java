@@ -27,11 +27,13 @@ public class EnrollmentService {
     private final EnrollmentRepository enrollmentRepository;
     private final StudentProfileRepository profileRepository;
     private final ProjectRepository projectRepository;
+    private final com.virtualcompany.modules.journey.JourneyRepository journeys;
 
     @Transactional
     public EnrollmentResponse enroll(UUID userId, EnrollProjectRequest request) {
         StudentProfile student = profileRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "userId", userId));
+        if (!student.getUser().isEmailVerified()) throw new com.virtualcompany.common.exception.BadRequestException("Verify your email before joining a project.");
 
         Project project = projectRepository.findById(request.getProjectId())
                 .orElseThrow(() -> new ResourceNotFoundException("Project", "id", request.getProjectId()));
@@ -67,6 +69,7 @@ public class EnrollmentService {
 
     @Transactional(readOnly = true)
     public EnrollmentResponse getCurrentEnrollment(UUID userId) {
+        if (journeys.existsByUserIdAndStatus(userId, "PENDING_REVIEW")) return null;
         StudentProfile student = profileRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "userId", userId));
 
@@ -83,6 +86,7 @@ public class EnrollmentService {
 
     @Transactional(readOnly = true)
     public List<EnrollmentResponse> getStudentEnrollments(UUID userId) {
+        if (journeys.existsByUserIdAndStatus(userId, "PENDING_REVIEW")) return List.of();
         StudentProfile student = profileRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("StudentProfile", "userId", userId));
 

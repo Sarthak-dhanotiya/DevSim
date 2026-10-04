@@ -22,6 +22,10 @@ import java.util.UUID;
 @AllArgsConstructor
 @Builder
 public class Project {
+    @Column(name="github_template_repo",length=255)
+    private String githubTemplateRepo;
+    @Column(name="github_repo_mode",nullable=false,length=20)
+    @Builder.Default private String githubRepoMode="TEMPLATE";
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

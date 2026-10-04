@@ -1,4 +1,8 @@
 'use client';
+import { GitHubIntegration } from '@/components/common/GitHubIntegration';
+import {githubRequest,GitHubWorkspace} from '@/lib/github';
+import {PipelineModal} from '@/components/workspace/PipelineModal';
+import type {PipelineResult} from '@/components/workspace/usePipelineRunner';
 
 import React, { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
@@ -365,6 +369,8 @@ function WorkspaceContent() {
   const [codeSnippet, setCodeSnippet] = useState('');
   const [githubPrUrl, setGithubPrUrl] = useState('');
   const [submissionMode, setSubmissionMode] = useState<'code' | 'github'>('code');
+  const [githubRepoReady,setGithubRepoReady] = useState(false);
+  const [pipelineRun,setPipelineRun]=useState<{key:number;ticketKey:string;code:string;mode:'code'|'github';run:()=>Promise<PipelineResult>}|null>(null);
   const [modalTab, setModalTab] = useState<'overview' | 'guide' | 'submit'>('overview');
   const [copiedBranch, setCopiedBranch] = useState(false);
   const [copiedTemplate, setCopiedTemplate] = useState(false);
@@ -531,39 +537,41 @@ function WorkspaceContent() {
   }
 
   function submitCurrentSolution() {
-    if (!selectedTicket) return;
-
-    if (submissionMode === 'code') {
-      const cleaned = codeSnippet
-        .replace(/\/\/.*/g, '')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .trim();
-
-      const isUnmodified =
-        codeSnippet.includes('// Implement your solution logic here') ||
-        codeSnippet.includes('// Write or paste your implementation code here...') ||
-        codeSnippet.includes('public void execute() {\n        // Implement your solution logic here\n    }') ||
-        cleaned.length < 35;
-
-      if (isUnmodified) {
-        alert(
-          '⚠️ Please write or customize your Java implementation before submitting.\n\n' +
-          'Alex Mitchell (Tech Lead) reviews your code against the ticket criteria. ' +
-          'Submitting an empty starter stub will result in changes requested.'
-        );
-        return;
+    if (!selectedTicket || !workspace || pipelineRun) return;
+    const ticket=selectedTicket;
+    const enrollmentId=workspace.enrollmentId;
+    const mode=submissionMode;
+    const code=codeSnippet;
+    const notes=mode==='code'
+      ? 'Code Snippet:\n'+code+'\n\nDeveloper Notes:\n'+submissionNotes
+      : 'GitHub PR URL: '+githubPrUrl+'\n\nDeveloper Notes:\n'+submissionNotes;
+    const run=async():Promise<PipelineResult>=>{
+      let updated:ProjectTicket;
+      let githubFeedback:string|undefined;
+      let githubApproved=true;
+      if(mode==='github'&&githubRepoReady){
+        const synced=await githubRequest<GitHubWorkspace>('/projects/'+enrollmentId+'/sync','POST');
+        const fresh=await api.getWorkspace(enrollmentId);
+        const found=fresh.data.tickets.find(t=>t.id===ticket.id);
+        if(!found)throw new Error('Ticket was not found after repository sync.');
+        updated=found;
+        const pr=synced.pullRequests.find(p=>p.ticket_id===ticket.id);
+        githubApproved=!!pr?.approved;
+        githubFeedback=pr?.review_body||'Open a PR using this ticket branch, then retry. A matching approved PR is required.';
+        setWorkspace(fresh.data);
+      }else{
+        if(mode==='github'){
+          let url:URL;try{url=new URL(githubPrUrl);}catch{throw new Error('Enter a valid GitHub PR URL or set up your GitHub workspace.');}
+          if(url.protocol!=='https:'||url.hostname!=='github.com'||!/^\/[^/]+\/[^/]+\/(pull\/\d+|commit\/[a-f0-9]+)\/?$/i.test(url.pathname))throw new Error('Use an HTTPS GitHub pull request or commit URL.');
+        }
+        const response=await api.updateTicketStatus(enrollmentId,ticket.id,{status:'IN_REVIEW',submissionNotes:notes});
+        updated=response.data;
+        setWorkspace(current=>{if(!current)return current;const tickets=current.tickets.map(t=>t.id===updated.id?updated:t);const completed=tickets.filter(t=>t.status==='DONE').length;return {...current,tickets,completedTickets:completed,progressPercentage:tickets.length?Math.round(completed/tickets.length*100):0};});
       }
-    } else if (!githubPrUrl.trim()) {
-      alert('⚠️ Please provide a valid GitHub PR or commit URL.');
-      return;
-    }
-
-    const combined =
-      submissionMode === 'code'
-        ? `Code Snippet:\n${codeSnippet}\n\nDeveloper Notes:\n${submissionNotes}`
-        : `GitHub PR URL: ${githubPrUrl}\n\nDeveloper Notes:\n${submissionNotes}`;
-
-    handleStatusChange(selectedTicket, 'IN_REVIEW', combined);
+      setSelectedTicket(updated);setModalTab('submit');
+      return {approved:updated.status==='DONE'&&githubApproved,feedback:githubFeedback||updated.aiReviewFeedback||'Backend review has not approved the submission. Review ticket acceptance criteria and retry.',score:updated.reviewScore};
+    };
+    setPipelineRun({key:Date.now(),ticketKey:ticket.ticketKey,code,mode,run});
   }
 
   if (loading) {
@@ -601,7 +609,9 @@ function WorkspaceContent() {
 
   return (
     <div className="page-enter max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      {pipelineRun&&<PipelineModal key={pipelineRun.key} ticketKey={pipelineRun.ticketKey} code={pipelineRun.code} mode={pipelineRun.mode} run={pipelineRun.run} onClose={()=>setPipelineRun(null)} onRerun={()=>setPipelineRun(current=>current?{...current,key:Date.now()}:null)} onNext={workspace.tickets.some(t=>t.status==='TODO')?()=>{setPipelineRun(null);const next=workspace.tickets.find(t=>t.status==='TODO');if(next)openTicketModal(next);}:undefined}/>}
       <JourneyProgress onSprint={loadWorkspace} />
+      <GitHubIntegration enrollmentId={workspace.enrollmentId} onSync={loadWorkspace} onRepositoryChange={setGithubRepoReady}/>
       {/* 1. TOP WORKSPACE BAR */}
       <div className="p-5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -638,6 +648,7 @@ function WorkspaceContent() {
             </div>
             <div className="text-[11px] text-slate-500 mt-1">
               {workspace.completedTickets} of {workspace.totalTickets} tickets done
+              <span className="block mt-1">7-day velocity: {tickets.filter(t=>t.status==='DONE'&&t.completedAt&&new Date(t.completedAt).getTime()>=Date.now()-7*86400000).length} tickets</span>
             </div>
           </div>
 
@@ -1089,6 +1100,12 @@ function WorkspaceContent() {
                                   placeholder="// Write or paste your implementation code here..."
                                   className="w-full text-xs font-mono p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-950 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 leading-relaxed resize-y"
                                 />
+                              </div>
+                            ) : githubRepoReady ? (
+                              <div className="rounded-lg bg-violet-50 dark:bg-violet-950/30 p-4 text-sm space-y-2">
+                                <p>Push your ticket branch and open a pull request on GitHub. DevSim finds it automatically.</p>
+                                <code className="block text-xs">git checkout -b feature/{selectedTicket.ticketKey.toLowerCase()}</code>
+                                <p className="text-xs text-slate-500">Submit below syncs your repository and reviews the linked PR. No URL copy-paste is needed.</p>
                               </div>
                             ) : (
                               <div className="space-y-1.5">

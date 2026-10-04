@@ -12,6 +12,7 @@ interface UserSession {
 }
 
 interface AuthContextType {
+  journeyStatus: string | null;
   user: UserSession | null;
   token: string | null;
   loading: boolean;
@@ -27,6 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserSession | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [journeyStatus, setJourneyStatus] = useState<string | null>(null);
 
   const initAuth = async () => {
     try {
@@ -35,6 +37,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(savedToken);
         const res = await api.getCurrentUser();
         if (res.data) {
+          if (res.data.role === 'STUDENT') {
+            const journey = await api.getJourney();
+            setJourneyStatus(journey.data.journey.status);
+          }
           setUser({
             userId: res.data.userId,
             email: res.data.email,
@@ -61,6 +67,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const res = await api.login({ email, password });
     if (res.data && res.data.token) {
       localStorage.setItem('vc_token', res.data.token);
+      if (res.data.role === 'STUDENT') {
+        const journey = await api.getJourney();
+        setJourneyStatus(journey.data.journey.status);
+      } else setJourneyStatus(null);
       setToken(res.data.token);
       setUser({
         userId: res.data.userId,
@@ -74,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (name: string, email: string, password: string) => {
     const res = await api.register({ name, email, password });
     if (res.data && res.data.token) {
+      setJourneyStatus('DRAFT');
       localStorage.setItem('vc_token', res.data.token);
       setToken(res.data.token);
       setUser({
@@ -86,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
+    setJourneyStatus(null);
     localStorage.removeItem('vc_token');
     setUser(null);
     setToken(null);
@@ -93,7 +105,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshProfile = async () => {
     try {
-      const res = await api.getProfile();
+      const [res, journey] = await Promise.all([api.getProfile(), user?.role === 'STUDENT' ? api.getJourney() : Promise.resolve(null)]);
+      if (journey) setJourneyStatus(journey.data.journey.status);
       if (res.data && user) {
         setUser({
           ...user,
@@ -108,6 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
+        journeyStatus,
         user,
         token,
         loading,

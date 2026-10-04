@@ -168,6 +168,9 @@ public class EmailService {
         sendEmailAsync(toEmail, subject, htmlContent);
     }
 
+    public void sendRegistrationVerification(String email,String code) {
+        sendEmailAsync(email,"Verify your DevSim email", "<h2>Your first day at DevSim</h2><p>Enter this code to verify your email:</p><p style='font-size:28px;font-weight:bold'>"+code+"</p><p>Expires in 10 minutes. If you did not request this, ignore this email.</p>");
+    }
     private void sendEmailAsync(String toEmail, String subject, String htmlContent) {
         CompletableFuture.runAsync(() -> {
             try {

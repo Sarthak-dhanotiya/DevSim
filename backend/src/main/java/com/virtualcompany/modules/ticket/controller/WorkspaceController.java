@@ -24,7 +24,12 @@ public class WorkspaceController {
     private final com.virtualcompany.modules.enrollment.repository.EnrollmentRepository enrollmentRepository;
     private final com.virtualcompany.modules.ticket.repository.ProjectTicketRepository ticketRepository;
     private final com.virtualcompany.modules.ticket.repository.StudentTicketProgressRepository progressRepository;
+    private final com.virtualcompany.modules.journey.JourneyRepository journeys;
+    private void verifyAssignmentApproved(com.virtualcompany.common.security.UserPrincipal user) {
+        if (journeys.existsByUserIdAndStatus(user.getId(), "PENDING_REVIEW")) throw new org.springframework.security.access.AccessDeniedException("Your assignment request is awaiting admin approval.");
+    }
     private void verifyOwner(UUID enrollmentId, com.virtualcompany.common.security.UserPrincipal user) {
+        verifyAssignmentApproved(user);
         var e = enrollmentRepository.findById(enrollmentId).orElseThrow(() -> new com.virtualcompany.common.exception.BadRequestException("Workspace not found."));
         if (!e.getStudent().getUser().getId().equals(user.getId())) throw new org.springframework.security.access.AccessDeniedException("This workspace belongs to another student.");
     }
@@ -93,6 +98,7 @@ public class WorkspaceController {
             @org.springframework.security.core.annotation.AuthenticationPrincipal com.virtualcompany.common.security.UserPrincipal user,
             @Valid @RequestBody AiChatRequest request
     ) {
+        verifyAssignmentApproved(user);
         if (request.getTicketId() != null) {
             var t = ticketRepository.findById(request.getTicketId()).orElseThrow(() -> new com.virtualcompany.common.exception.BadRequestException("Ticket not found."));
             if (t.getTargetUser() != null && !t.getTargetUser().getId().equals(user.getId())) throw new org.springframework.security.access.AccessDeniedException("Ticket belongs to another student.");

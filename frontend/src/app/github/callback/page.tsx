@@ -1,0 +1,4 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import {githubRequest} from '@/lib/github';
+export default function GitHubCallback(){const once=useRef(false);const [message,setMessage]=useState('Connecting your GitHub account…');useEffect(()=>{if(once.current)return;once.current=true;const params=new URLSearchParams(window.location.search);const code=params.get('code'),state=params.get('state');window.history.replaceState({},'',window.location.pathname);if(!code||!state){setMessage('GitHub authorization was cancelled. Return to Profile and connect again.');return;}githubRequest('/callback','POST',{code,state}).then(()=>window.location.replace('/profile')).catch(e=>setMessage(e.message));},[]);return <main className="max-w-xl mx-auto p-10"><h1 className="text-xl font-semibold">GitHub connection</h1><p className="mt-4" role="status">{message}</p><a className="block mt-4 underline" href="/profile">Return to profile</a></main>;}

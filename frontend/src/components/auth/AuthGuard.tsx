@@ -5,10 +5,10 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth/AuthContext';
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, journeyStatus } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const needsOnboarding = user?.role === 'STUDENT' && !user.profile?.onboardingCompleted && pathname !== '/onboarding';
+  const needsOnboarding = user?.role === 'STUDENT' && (!user.profile?.onboardingCompleted || journeyStatus === 'PENDING_REVIEW') && pathname !== '/onboarding';
 
   useEffect(() => {
     if (!loading && !user) {

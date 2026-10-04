@@ -21,6 +21,8 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 public class ProjectResponse {
     private UUID id;
+    private String githubTemplateRepo;
+    private String githubRepoMode;
     private String name;
     private String slug;
     private String shortDescription;
@@ -43,6 +45,8 @@ public class ProjectResponse {
 
         return ProjectResponse.builder()
                 .id(project.getId())
+                .githubTemplateRepo(project.getGithubTemplateRepo())
+                .githubRepoMode(project.getGithubRepoMode())
                 .name(project.getName())
                 .slug(project.getSlug())
                 .shortDescription(project.getShortDescription())

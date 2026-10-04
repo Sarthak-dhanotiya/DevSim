@@ -55,6 +55,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Preflight requests
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/github/webhook").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/github/portfolio/*").permitAll()
 
                         // Swagger & OpenAPI
                         .requestMatchers(

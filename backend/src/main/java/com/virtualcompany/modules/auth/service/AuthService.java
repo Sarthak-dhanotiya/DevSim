@@ -58,6 +58,7 @@ public class AuthService {
                 .email(normalizedEmail)
                 .passwordHash(passwordEncoder.encode(rawPassword))
                 .role(Role.STUDENT)
+                .emailVerified(false)
                 .build();
 
         User savedUser = userRepository.save(user);

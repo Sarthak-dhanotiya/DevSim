@@ -18,6 +18,10 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreateProjectRequest {
+    @jakarta.validation.constraints.Pattern(regexp="(?:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?",message="Use owner/repository for the GitHub template")
+    private String githubTemplateRepo;
+    @jakarta.validation.constraints.Pattern(regexp="TEMPLATE|FORK",message="GitHub repository mode must be TEMPLATE or FORK")
+    @Builder.Default private String githubRepoMode="TEMPLATE";
 
     private UUID companyId;
 
