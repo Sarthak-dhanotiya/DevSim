@@ -28,7 +28,7 @@ public class StudentProjectEnrollment {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "student_id", nullable = false)
     private StudentProfile student;
 

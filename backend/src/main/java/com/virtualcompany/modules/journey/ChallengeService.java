@@ -18,7 +18,7 @@ public class ChallengeService {
     private final ObjectMapper json;
     private final RestClient ai;
     @Value("${app.gemini.api-key:}") private String key="";
-    @Value("${app.gemini.model:gemini-2.5-flash}") private String model;
+    @Value("${app.gemini.model:gemini-1.5-flash}") private String model;
     public ChallengeService(ObjectMapper json){this.json=json;var f=new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());f.setReadTimeout(Duration.ofSeconds(25));ai=RestClient.builder().requestFactory(f).build();}
     public record Question(String title,List<String> options){}
     public record View(String id,String source,String context,int minutes,List<Question> questions,String task,List<String> criteria,String unavailableReason){}
