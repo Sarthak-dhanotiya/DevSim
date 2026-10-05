@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -19,9 +21,28 @@
 body {
   color: var(--foreground);
   background-color: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Inter', 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overflow-x: hidden;
   transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* Ensure inputs, selects, and textareas use clean normal sans typography */
+input, textarea, select, button {
+  font-family: inherit;
+}
+
+/* Paper UI component styling for elevated clean cards */
+.paper-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.03);
+}
+
+.dark .paper-card {
+  background-color: #0f172a;
+  border-color: #1e293b;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
 }
 
 /* Subtle clean scrollbars */

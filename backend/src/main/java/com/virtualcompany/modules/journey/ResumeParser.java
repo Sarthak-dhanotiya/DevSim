@@ -14,7 +14,7 @@ import java.util.zip.*;
 
 @Service
 public class ResumeParser {
-    static final List<String> SKILLS = List.of("Java", "Spring Boot", "Python", "JavaScript", "TypeScript", "React", "Next.js", "Node.js", "Express", "SQL", "PostgreSQL", "MySQL", "MongoDB", "Redis", "Docker", "Git", "HTML", "CSS", "Tailwind", "AWS", "JUnit", "Jest", "REST", "GraphQL", "C++", "C#", "Go", "Django", "Flask", "Kotlin", "Angular", "Vue", "Figma", "Linux", "Kubernetes");
+    static final List<String> SKILLS = List.of("Java", "Spring Boot", "Python", "JavaScript", "TypeScript", "React", "Next.js", "Node.js", "Express", "SQL", "PostgreSQL", "MySQL", "MongoDB", "Redis", "Docker", "Git", "HTML", "CSS", "Tailwind", "AWS", "JUnit", "Jest", "REST", "GraphQL", "C++", "C#", "Go", "Django", "Flask", "Kotlin", "Angular", "Vue", "Figma", "Linux", "Kubernetes", "Kafka", "Microservices", "Spring Security", "WebFlux");
     public record ParsedResume(String fileName, List<String> skills, String summary, String parser, String warning) {}
     public ParsedResume parse(MultipartFile file) {
         if (file.isEmpty() || file.getSize() > 5 * 1024 * 1024) throw new BadRequestException("Upload a resume smaller than 5 MB.");
@@ -38,7 +38,13 @@ public class ResumeParser {
         String normalized = text.toLowerCase(Locale.ROOT);
         var skills = SKILLS.stream().filter(s -> Pattern.compile("(?<![a-z0-9])" + Pattern.quote(s.toLowerCase(Locale.ROOT)) + "(?![a-z0-9])").matcher(normalized).find()).toList();
         String summary = skills.isEmpty() ? "No known technical skills detected. Add your skills manually." : "Detected " + skills.size() + " skills: " + String.join(", ", skills) + ". Confirm these before continuing.";
-        return new ParsedResume(name.substring(0, Math.min(name.length(), 255)), skills, summary, "LOCAL_TEXT_EXTRACTION", "Resume claims are unverified. No resume file is retained or sent to an AI provider.");
+        String evidence=Arrays.stream(text.split("[\\r\\n]+"))
+            .map(String::trim).filter(line->line.length()>25&&line.length()<500)
+            .filter(line->!line.contains("@")&&!line.matches(".*https?://.*")&&!line.matches(".*[0-9]{7,}.*"))
+            .filter(line->skills.stream().anyMatch(skill->line.toLowerCase(Locale.ROOT).contains(skill.toLowerCase(Locale.ROOT))))
+            .limit(8).reduce((a,b)->a+"; "+b).orElse("");
+        if(!evidence.isBlank())summary+=" Technical experience: "+evidence;
+        return new ParsedResume(name.substring(0, Math.min(name.length(), 255)), skills, summary, "LOCAL_TEXT_EXTRACTION", "Resume claims are unverified. The file is discarded. Extracted technical summaries may personalize AI challenges; resume claims are not verified.");
     }
     private String readDocx(byte[] bytes) throws Exception {
         try (var zip = new ZipInputStream(new ByteArrayInputStream(bytes))) {

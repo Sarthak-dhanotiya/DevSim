@@ -19,9 +19,10 @@ class JourneyServiceTest {
     AiTaskGenerationService generator = mock(AiTaskGenerationService.class);
     ProjectRepository projects = mock(ProjectRepository.class);
     EnrollmentService enroll = mock(EnrollmentService.class);
-    JourneyService service = new JourneyService(repo, profiles, mock(CareerTrackRepository.class), projects, enroll, mock(EnrollmentRepository.class), mock(ProjectTicketRepository.class), mock(StudentTicketProgressRepository.class), generator);
+    ChallengeService challenges=mock(ChallengeService.class);
+    JourneyService service = new JourneyService(repo, profiles, mock(CareerTrackRepository.class), projects, enroll, mock(EnrollmentRepository.class), mock(ProjectTicketRepository.class), mock(StudentTicketProgressRepository.class), generator, challenges);
     UUID user = UUID.randomUUID(); StudentJourney journey = new StudentJourney();
-    @BeforeEach void setup() { journey.setUserId(user); when(repo.findByUserId(user)).thenReturn(Optional.of(journey)); }
+    @BeforeEach void setup() { journey.setUserId(user); when(repo.findByUserId(user)).thenReturn(Optional.of(journey)); when(profiles.findByUserId(user)).thenReturn(Optional.of(StudentProfile.builder().build()));when(challenges.grade(any(),any(),any())).thenReturn(new JourneyService.AssessmentResult(100,"INTERMEDIATE","Provisional")); }
     @Test void rejectsIncompleteJourneyBeforeEnrollment() {
         assertThatThrownBy(() -> service.complete(user, UUID.randomUUID())).isInstanceOf(BadRequestException.class);
         verifyNoInteractions(enroll, generator);
@@ -32,10 +33,10 @@ class JourneyServiceTest {
         verifyNoInteractions(enroll, generator);
     }
     @Test void assessmentValidatesAnswersAndLocksAfterSubmission() {
-        assertThatThrownBy(() -> service.assess(user, new JourneyService.AssessmentRequest(List.of(1), "return active"))).isInstanceOf(BadRequestException.class);
-        assertThat(service.assess(user, new JourneyService.AssessmentRequest(List.of(1,0,2), "if null return []; return data.filter(active)")).score()).isEqualTo(100);
+
+        assertThat(service.assess(user, new JourneyService.AssessmentRequest(List.of(1,0,2), "if null return []; return data.filter(active)", "challenge")).score()).isEqualTo(100);
         journey.setStatus("PENDING_REVIEW");
-        assertThatThrownBy(() -> service.assess(user, new JourneyService.AssessmentRequest(List.of(1,0,2), "return active"))).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.assess(user, new JourneyService.AssessmentRequest(List.of(1,0,2), "return active", "challenge"))).isInstanceOf(BadRequestException.class);
     }
     @Test void avoidsSubstringSkillMatches() {
         assertThat(JourneyService.skillMatches("Java", "JavaScript")).isFalse();
@@ -48,7 +49,7 @@ class JourneyServiceTest {
         service.skipAssessment(user);
         assertThat(journey.isAssessmentSkipped()).isTrue();
         assertThat(journey.getAssessmentScore()).isNull();
-        service.assess(user,new JourneyService.AssessmentRequest(List.of(1,0,2),"if null return []; return data.filter(active)"));
+        service.assess(user,new JourneyService.AssessmentRequest(List.of(1,0,2),"if null return []; return data.filter(active)","challenge"));
         assertThat(journey.isAssessmentSkipped()).isFalse();
         journey.setStatus("PENDING_REVIEW");
         assertThatThrownBy(()->service.skipAssessment(user)).isInstanceOf(BadRequestException.class);

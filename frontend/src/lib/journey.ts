@@ -15,3 +15,5 @@ export interface Evidence {
   name: string; skills: string; verification: string;
   completedTickets: { project: string; ticket: string; title: string; criteria: string; score?: number; completedAt: string; source: string; feedback: string }[];
 }
+
+export interface PersonalizedChallenge {id:string;source:"GEMINI"|"PROFILE_FALLBACK";unavailableReason?:string;context:string;minutes:number;questions:{title:string;options:string[]}[];task:string;criteria:string[];}

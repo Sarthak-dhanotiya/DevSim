@@ -30,6 +30,7 @@ public class JourneyService {
     private final ProjectTicketRepository tickets;
     private final StudentTicketProgressRepository progress;
     private final AiTaskGenerationService generator;
+    private final ChallengeService challenges;
     @Value("${app.gemini.api-key:}") private String apiKey;
     private StudentJourney journey(UUID userId) {
         return journeys.findByUserId(userId).orElseGet(() -> { var j = new StudentJourney(); j.setUserId(userId); return journeys.save(j); });
@@ -53,31 +54,26 @@ public class JourneyService {
         j.setGoal(request.getGoal().trim()); j.setWeeklyHours(request.getWeeklyHours());
         j.setAssignmentMode(request.getAssignmentMode()); j.setPreferredProjectId(request.getProjectId());
         j.setRequestNote(request.getRequestNote()); j.setStatus("DRAFT");
+        if(j.getChallengeFingerprint()!=null&&!challenges.fingerprint(j,profile).equals(j.getChallengeFingerprint())){j.setChallengeFingerprint(null);j.setChallengeJson(null);j.setAssessmentScore(null);j.setAssessmentAnswer(null);j.setAssessmentSkipped(false);}
         journeys.save(j);
         return state(userId);
     }
     @Transactional public void resume(UUID userId, ResumeParser.ParsedResume result) {
         var j = journey(userId);
         if (!Set.of("DRAFT", "REJECTED").contains(j.getStatus())) throw new BadRequestException("Onboarding is already submitted.");
+        j.setChallengeFingerprint(null);j.setAssessmentScore(null);j.setAssessmentAnswer(null);j.setAssessmentSkipped(false);
         j.setResumeName(result.fileName()); j.setResumeSummary(result.summary());
         j.setSkills(String.join(", ", result.skills())); journeys.save(j);
     }
-    public record AssessmentRequest(List<Integer> answers, String solution) {}
+    public record AssessmentRequest(List<Integer> answers, String solution, String challengeId) {}
+    @Transactional public ChallengeService.View challenge(UUID userId, boolean retry) { var j=journey(userId); if(retry&&j.getChallengeJson()!=null&&j.getChallengeJson().contains("PROFILE_FALLBACK")){j.setChallengeFingerprint(null);} var p=profiles.findByUserId(userId).orElseThrow(); var view=challenges.get(j,p); journeys.save(j); return view; }
     public record AssessmentResult(int score, String level, String feedback) {}
     @Transactional public AssessmentResult assess(UUID userId, AssessmentRequest request) {
         var j = journey(userId);
         if (!Set.of("DRAFT", "REJECTED").contains(j.getStatus())) throw new BadRequestException("Assessment is already submitted.");
-        if (request.answers() == null || request.answers().size() != 3 || request.answers().stream().anyMatch(a -> a == null || a < 0 || a > 2)) throw new BadRequestException("Answer all three starter questions.");
-        if (request.solution() == null || request.solution().isBlank() || request.solution().length() > 10000) throw new BadRequestException("Add your code or pseudocode solution (maximum 10,000 characters).");
-        int score = 0; var correct = List.of(1, 0, 2);
-        for (int i = 0; i < 3; i++) if (correct.get(i).equals(request.answers().get(i))) score += 20;
-        String code = request.solution().toLowerCase(Locale.ROOT);
-        if (code.contains("return")) score += 10;
-        if (code.contains("filter") || code.contains("for ") || code.contains("for(")) score += 10;
-        if (code.contains("active")) score += 10;
-        if (code.contains("null") || code.contains("isarray") || code.contains("empty") || code.contains("isinstance")) score += 10;
-        j.setAssessmentSkipped(false); j.setAssessmentScore(score); j.setAssessmentAnswer(request.solution()); journeys.save(j);
-        return new AssessmentResult(score, score >= 80 ? "INTERMEDIATE" : "BEGINNER", "Provisional result: " + score + "/100. Questions are scored against fixed answers; code is checked for basic patterns, not executed. Real ticket reviews will guide your next sprint.");
+        var result=challenges.grade(j,profiles.findByUserId(userId).orElseThrow(),request);
+        j.setAssessmentSkipped(false);j.setAssessmentScore(result.score());j.setAssessmentAnswer(request.solution());journeys.save(j);
+        return result;
     }
     @Transactional public State skipAssessment(UUID userId) {var j=journey(userId);if(!Set.of("DRAFT","REJECTED").contains(j.getStatus()))throw new BadRequestException("Journey already submitted");j.setAssessmentSkipped(true);j.setAssessmentScore(null);j.setAssessmentAnswer(null);journeys.save(j);return state(userId);}
     private List<Recommendation> recommendations(UUID userId, StudentJourney j) {

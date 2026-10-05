@@ -73,14 +73,14 @@ function ResetPasswordForm() {
     <div className="min-h-[75vh] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
-          <div className="w-9 h-9 rounded bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center font-bold mx-auto mb-3">
-            <Lock className="w-4 h-4" />
+          <div className="w-11 h-11 rounded-2xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center font-bold mx-auto mb-3 shadow-md shadow-slate-900/10">
+            <Lock className="w-5 h-5" />
           </div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Set New Password</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Set New Password</h1>
           <p className="text-xs text-slate-500 mt-1">Verify OTP and create your new password</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 shadow-sm">
+        <div className="paper-card bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-7 sm:p-8 shadow-xl shadow-slate-200/50 dark:shadow-none">
           {resetSuccess ? (
             <div className="text-center py-4 space-y-4">
               <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto border border-emerald-200 dark:border-emerald-800">
@@ -98,8 +98,8 @@ function ResetPasswordForm() {
 
               <div className="pt-2">
                 <Link href="/login">
-                  <Button variant="primary" className="w-full text-xs flex items-center justify-center gap-1.5">
-                    Proceed to Sign In <ArrowRight className="w-3.5 h-3.5" />
+                  <Button variant="primary" className="w-full py-2.5 text-sm font-semibold rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-slate-900/10">
+                    Proceed to Sign In <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>
               </div>
@@ -107,7 +107,7 @@ function ResetPasswordForm() {
           ) : (
             <>
               {error && (
-                <div className="mb-4 p-3 rounded bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
+                <div className="mb-5 p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 flex items-start gap-2.5 text-xs text-red-700 dark:text-red-300">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{error}</span>
                 </div>
@@ -115,7 +115,7 @@ function ResetPasswordForm() {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     Email Address
                   </label>
                   <input
@@ -124,18 +124,18 @@ function ResetPasswordForm() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="developer@college.edu"
-                    className="w-full px-3 py-2 rounded-md bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-1 focus:ring-slate-400 font-mono"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50/70 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-sm font-sans focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   />
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                       6-Digit OTP Code
                     </label>
                     <Link
                       href="/forgot-password"
-                      className="text-[11px] text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                      className="text-[11px] text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400"
                     >
                       Resend OTP?
                     </Link>
@@ -147,12 +147,12 @@ function ResetPasswordForm() {
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                     placeholder="123456"
-                    className="w-full px-3 py-2 rounded-md bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-center tracking-widest text-sm font-mono font-bold focus:outline-none focus:ring-1 focus:ring-slate-400"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50/70 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-center tracking-[0.3em] text-base font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     New Password
                   </label>
                   <input
@@ -162,12 +162,12 @@ function ResetPasswordForm() {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="At least 6 characters"
-                    className="w-full px-3 py-2 rounded-md bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-1 focus:ring-slate-400 font-mono"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50/70 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-sm font-sans focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     Confirm New Password
                   </label>
                   <input
@@ -177,7 +177,7 @@ function ResetPasswordForm() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Re-enter new password"
-                    className="w-full px-3 py-2 rounded-md bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-1 focus:ring-slate-400 font-mono"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50/70 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-sm font-sans focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   />
                 </div>
 
@@ -185,15 +185,15 @@ function ResetPasswordForm() {
                   type="submit"
                   variant="primary"
                   loading={loading}
-                  className="w-full py-2 text-xs mt-2"
+                  className="w-full py-2.5 text-sm font-semibold rounded-xl mt-2 shadow-md shadow-slate-900/10 hover:shadow-lg transition-all"
                 >
                   Set New Password
                 </Button>
               </form>
 
-              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500">
+              <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500">
                 Remember your password?{' '}
-                <Link href="/login" className="text-slate-900 dark:text-white font-medium hover:underline">
+                <Link href="/login" className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
                   Sign In
                 </Link>
               </div>

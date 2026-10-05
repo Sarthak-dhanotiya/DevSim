@@ -7,6 +7,8 @@ import java.util.UUID;
 
 @Entity @Table(name = "student_journeys") @Getter @Setter @NoArgsConstructor
 public class StudentJourney {
+    @com.fasterxml.jackson.annotation.JsonIgnore @Column(columnDefinition="TEXT") private String challengeJson;
+    @com.fasterxml.jackson.annotation.JsonIgnore private String challengeFingerprint;
     @Id @GeneratedValue(strategy = GenerationType.UUID) private UUID id;
     @Column(nullable = false, unique = true) private UUID userId;
     @Column(columnDefinition = "TEXT", nullable = false) private String skills = "";

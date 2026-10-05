@@ -89,8 +89,9 @@ class ApiClient {
     const body = new FormData(); body.append('file', file);
     return this.request<{ fileName: string; skills: string[]; summary: string; parser: string; warning: string }>('/journey/resume', { method: 'POST', body });
   }
-  async assessJourney(answers: number[], solution: string) {
-    return this.request<{ score: number; level: string; feedback: string }>('/journey/assessment', { method: 'POST', body: JSON.stringify({ answers, solution }) });
+  async getJourneyChallenge(retry=false){return this.request<import("../journey").PersonalizedChallenge>(`/journey/challenge?retry=${retry}`,{method:"POST"});}
+  async assessJourney(answers: number[], solution: string, challengeId: string) {
+    return this.request<{ score: number; level: string; feedback: string }>('/journey/assessment', { method: 'POST', body: JSON.stringify({ answers, solution, challengeId }) });
   }
   async completeJourney(projectId: string) { return this.request<JourneyState>('/journey/complete', { method: 'POST', body: JSON.stringify({ projectId }) }); }
   async getAssignmentRequests() { return this.request<AssignmentRequest[]>('/super-admin/assignment-requests'); }

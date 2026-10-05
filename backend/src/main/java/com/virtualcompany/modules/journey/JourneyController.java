@@ -15,6 +15,7 @@ public class JourneyController {
     private final ResumeParser parser;
     private final RegistrationVerification verification;
     @PostMapping("/journey/assessment/skip") public Object skip(@AuthenticationPrincipal UserPrincipal user){return ApiResponse.ok(service.skipAssessment(user.getId()));}
+    @PostMapping("/journey/challenge") public Object challenge(@AuthenticationPrincipal UserPrincipal user,@RequestParam(defaultValue="false") boolean retry){return ApiResponse.ok(service.challenge(user.getId(),retry));}
     @GetMapping("/journey") public ApiResponse<JourneyService.State> state(@AuthenticationPrincipal UserPrincipal user) { return ApiResponse.ok(service.state(user.getId())); }
     @PutMapping("/journey") public ApiResponse<JourneyService.State> save(@AuthenticationPrincipal UserPrincipal user, @Valid @RequestBody JourneyRequest request) { return ApiResponse.ok(service.save(user.getId(), request)); }
     @PostMapping("/journey/resume") public ApiResponse<ResumeParser.ParsedResume> upload(@AuthenticationPrincipal UserPrincipal user, @RequestParam("file") MultipartFile file) {

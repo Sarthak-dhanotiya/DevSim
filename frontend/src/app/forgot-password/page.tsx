@@ -34,14 +34,14 @@ export default function ForgotPasswordPage() {
     <div className="min-h-[75vh] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
-          <div className="w-9 h-9 rounded bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center font-bold mx-auto mb-3">
-            <KeyRound className="w-4 h-4" />
+          <div className="w-11 h-11 rounded-2xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center font-bold mx-auto mb-3 shadow-md shadow-slate-900/10">
+            <KeyRound className="w-5 h-5" />
           </div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Forgot Password</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Forgot Password</h1>
           <p className="text-xs text-slate-500 mt-1">Receive a verification code to reset your password</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-6 shadow-sm">
+        <div className="paper-card bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl p-7 sm:p-8 shadow-xl shadow-slate-200/50 dark:shadow-none">
           {submittedEmail ? (
             <div className="text-center py-4 space-y-4">
               <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto border border-emerald-200 dark:border-emerald-800">
@@ -55,7 +55,7 @@ export default function ForgotPasswordPage() {
                 <p className="text-xs text-slate-600 dark:text-slate-400 mt-2 leading-relaxed">
                   We have sent a 6-digit OTP code to:
                 </p>
-                <div className="mt-1 px-3 py-1.5 rounded bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs font-mono font-medium text-slate-900 dark:text-white">
+                <div className="mt-2 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-900 dark:text-white">
                   {submittedEmail}
                 </div>
                 <p className="text-[11px] text-slate-500 mt-2">
@@ -65,8 +65,8 @@ export default function ForgotPasswordPage() {
 
               <div className="pt-2">
                 <Link href={`/reset-password?email=${encodeURIComponent(submittedEmail)}`}>
-                  <Button variant="primary" className="w-full text-xs flex items-center justify-center gap-1.5">
-                    Enter OTP & Set Password <ArrowRight className="w-3.5 h-3.5" />
+                  <Button variant="primary" className="w-full py-2.5 text-sm font-semibold rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-slate-900/10">
+                    Enter OTP & Set Password <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>
               </div>
@@ -74,7 +74,7 @@ export default function ForgotPasswordPage() {
           ) : (
             <>
               {error && (
-                <div className="mb-4 p-3 rounded bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 flex items-start gap-2 text-xs text-red-700 dark:text-red-300">
+                <div className="mb-5 p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 flex items-start gap-2.5 text-xs text-red-700 dark:text-red-300">
                   <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>{error}</span>
                 </div>
@@ -82,7 +82,7 @@ export default function ForgotPasswordPage() {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     Registered Email Address
                   </label>
                   <input
@@ -91,11 +91,11 @@ export default function ForgotPasswordPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="developer@college.edu"
-                    className="w-full px-3 py-2 rounded-md bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-1 focus:ring-slate-400 font-mono"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50/70 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-sm font-sans focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
                   />
                 </div>
 
-                <div className="p-3 rounded-md bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 flex items-start gap-2">
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 flex items-start gap-2">
                   <Mail className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                   <span>
                     A one-time 6-digit OTP will be sent to your email to verify your identity.
@@ -106,15 +106,15 @@ export default function ForgotPasswordPage() {
                   type="submit"
                   variant="primary"
                   loading={loading}
-                  className="w-full py-2 text-xs mt-2"
+                  className="w-full py-2.5 text-sm font-semibold rounded-xl mt-2 shadow-md shadow-slate-900/10 hover:shadow-lg transition-all"
                 >
                   Send Verification Code
                 </Button>
               </form>
 
-              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500">
+              <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500">
                 Remember your password?{' '}
-                <Link href="/login" className="text-slate-900 dark:text-white font-medium hover:underline">
+                <Link href="/login" className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline">
                   Sign In
                 </Link>
               </div>
