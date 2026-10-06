@@ -93,14 +93,19 @@ public class AiTaskGenerationService {
         String generationSource = "BUILT_IN";
 
         // 1. Try Live Gemini Generation if API key is present
-        if (geminiApiKey != null && !geminiApiKey.isBlank()) {
+        String cleanKey = geminiApiKey == null ? "" : geminiApiKey.trim().replace("\"", "").replace("'", "");
+        if (!cleanKey.isBlank()) {
             try {
                 drafts = callGeminiForTasks(user, profile, project, difficulty, focus, count);
                 drafts = drafts.stream().filter(d -> d != null && d.getTitle() != null && !d.getTitle().isBlank() && d.getDescription() != null && !d.getDescription().isBlank() && d.getAcceptanceCriteria() != null && !d.getAcceptanceCriteria().isBlank()).limit(count).toList();
                 if (drafts.size() == count) generationSource = "GEMINI";
                 else drafts = new ArrayList<>();
             } catch (Exception e) {
-                log.warn("Gemini generation failed; using built-in task templates.");
+                if (e instanceof org.springframework.web.client.RestClientResponseException rce) {
+                    log.error("Gemini task generation failed [HTTP {}]: {}", rce.getStatusCode(), rce.getResponseBodyAsString());
+                } else {
+                    log.error("Gemini task generation failed: {}", e.getMessage());
+                }
             }
         }
 
@@ -233,9 +238,10 @@ public class AiTaskGenerationService {
 
         String url = "https://generativelanguage.googleapis.com/v1beta/models/" + geminiModel + ":generateContent";
 
+        String cleanKey = geminiApiKey == null ? "" : geminiApiKey.trim().replace("\"", "").replace("'", "");
         String responseJson = restClient.post()
                 .uri(url)
-                .header("x-goog-api-key", geminiApiKey)
+                .header("x-goog-api-key", cleanKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(requestBody)
                 .retrieve()

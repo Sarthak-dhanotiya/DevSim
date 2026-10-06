@@ -48,14 +48,19 @@ public class AiTechLeadService {
         String userPrompt = request.getMessage().trim();
 
         // 1. If Gemini API key is configured, use live Generative AI
-        if (geminiApiKey != null && !geminiApiKey.isBlank()) {
+        String cleanKey = geminiApiKey == null ? "" : geminiApiKey.trim().replace("\"", "").replace("'", "");
+        if (!cleanKey.isBlank()) {
             try {
                 String aiReply = callGeminiApi(userPrompt, ticket);
                 if (aiReply != null && !aiReply.isBlank()) {
                     return buildResponse(aiReply);
                 }
             } catch (Exception ex) {
-                log.warn("Gemini API call failed; falling back to smart built-in engine: {}", ex.getMessage());
+                if (ex instanceof org.springframework.web.client.RestClientResponseException rce) {
+                    log.error("Gemini API call failed [HTTP {}]: {}", rce.getStatusCode(), rce.getResponseBodyAsString());
+                } else {
+                    log.error("Gemini API call failed: {}", ex.getMessage());
+                }
             }
         }
 
@@ -87,11 +92,14 @@ public class AiTechLeadService {
                 )
         );
 
-        String url = "https://generativelanguage.googleapis.com/v1beta/models/" + geminiModel + ":generateContent";
+        String cleanKey = geminiApiKey == null ? "" : geminiApiKey.trim().replace("\"", "").replace("'", "");
+        if (cleanKey.isBlank()) {
+            return null;
+        }
 
         String responseJson = restClient.post()
                 .uri(url)
-                .header("x-goog-api-key", geminiApiKey)
+                .header("x-goog-api-key", cleanKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(requestBody)
                 .retrieve()
