@@ -1,5 +1,26 @@
 # GitHub workflow
 
+## Start locally without re-entering credentials
+
+Edit `C:\virtualcompany\.env` once, then double-click `Start-DevSim.cmd`.
+The launcher loads `.env` into the backend process and restarts the local backend.
+This also works with `scripts/start-local.ps1`; running Java directly from an IDE
+does not use this loader. `.env` values override the launching terminal's values.
+Use one `NAME=value` per line, with optional matching quotes. Put comments on their
+own lines; values are literal and shell expressions are never evaluated.
+
+Required OAuth values: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and
+`GITHUB_CALLBACK_URL=http://localhost:3000/github/callback`. The token encryption
+key is automatically loaded from `%LOCALAPPDATA%\DevSim\github-token-key.xml`
+when `GITHUB_TOKEN_KEY` is unset. That Windows-encrypted file must be read by the
+original Windows account on the original machine. Alternatively supply the
+original Base64 key in `.env`; never regenerate it on each startup.
+
+`.env` is ignored by Git. Optional Gemini, review-bot, template and webhook
+settings are documented in `.env.example`. Frontend build variables still belong
+in `frontend/.env.local`. Render needs its own environment settings and cannot
+read the Windows-encrypted key file.
+
 ## Local configuration
 
 Create a GitHub **OAuth App** in Settings → Developer settings. Homepage: `http://localhost:3000`. Authorization callback: **`http://localhost:3000/github/callback`**. Set the following in the same PowerShell terminal used to start DevSim. Enter secrets at the prompt; do not paste them into chat or commit them.

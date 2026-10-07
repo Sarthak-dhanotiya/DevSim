@@ -1,6 +1,7 @@
 param([switch]$Build, [switch]$RestartBackend, [switch]$CheckBackendOwner)
 $ErrorActionPreference = 'Stop'
 $taskRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+& (Join-Path $PSScriptRoot 'load-local-env.ps1') -Root $taskRoot
 $taskLogs = Join-Path $taskRoot '.local'
 New-Item -ItemType Directory -Path $taskLogs -Force | Out-Null
 $taskJarPath = Join-Path $taskRoot 'backend/target/virtualcompany-backend-0.0.1-SNAPSHOT.jar'

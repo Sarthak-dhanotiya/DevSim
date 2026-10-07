@@ -97,6 +97,8 @@ public class AiTechLeadService {
             return null;
         }
 
+        String url = "https://generativelanguage.googleapis.com/v1beta/models/" + geminiModel + ":generateContent";
+
         String responseJson = restClient.post()
                 .uri(url)
                 .header("x-goog-api-key", cleanKey)
