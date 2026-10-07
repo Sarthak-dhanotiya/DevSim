@@ -46,7 +46,7 @@ app:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
   gemini:
     api-key: ${GEMINI_API_KEY:}
-    model: ${GEMINI_MODEL:gemini-1.5-flash}
+    model: ${GEMINI_MODEL:gemini-flash-latest}
 
 springdoc:
   api-docs:

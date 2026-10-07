@@ -97,24 +97,37 @@ public class AiTechLeadService {
             return null;
         }
 
-        String url = "https://generativelanguage.googleapis.com/v1beta/models/" + geminiModel + ":generateContent";
+        List<String> candidateModels = new ArrayList<>();
+        if (geminiModel != null && !geminiModel.isBlank()) {
+            candidateModels.add(geminiModel.trim());
+        }
+        if (!candidateModels.contains("gemini-flash-latest")) {
+            candidateModels.add("gemini-flash-latest");
+        }
 
-        String responseJson = restClient.post()
-                .uri(url)
-                .header("x-goog-api-key", cleanKey)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(requestBody)
-                .retrieve()
-                .body(String.class);
+        for (String modelToUse : candidateModels) {
+            try {
+                String url = "https://generativelanguage.googleapis.com/v1beta/models/" + modelToUse + ":generateContent";
+                String responseJson = restClient.post()
+                        .uri(url)
+                        .header("x-goog-api-key", cleanKey)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(requestBody)
+                        .retrieve()
+                        .body(String.class);
 
-        try {
-            JsonNode root = objectMapper.readTree(responseJson);
-            JsonNode textNode = root.path("candidates").path(0).path("content").path("parts").path(0).path("text");
-            if (!textNode.isMissingNode()) {
-                return textNode.asText();
+                JsonNode root = objectMapper.readTree(responseJson);
+                JsonNode textNode = root.path("candidates").path(0).path("content").path("parts").path(0).path("text");
+                if (!textNode.isMissingNode() && !textNode.asText().isBlank()) {
+                    return textNode.asText();
+                }
+            } catch (Exception ex) {
+                if (ex instanceof org.springframework.web.client.RestClientResponseException rce) {
+                    log.warn("Gemini model '{}' failed [HTTP {}]: {}", modelToUse, rce.getStatusCode(), rce.getResponseBodyAsString());
+                } else {
+                    log.warn("Gemini model '{}' failed: {}", modelToUse, ex.getMessage());
+                }
             }
-        } catch (Exception e) {
-            log.error("Failed to parse Gemini API response: {}", e.getMessage());
         }
 
         return null;
