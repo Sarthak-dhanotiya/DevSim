@@ -4,7 +4,7 @@ import {githubRequest,GitHubWorkspace} from '@/lib/github';
 import {PipelineModal} from '@/components/workspace/PipelineModal';
 import type {PipelineResult} from '@/components/workspace/usePipelineRunner';
 
-import React, { useEffect, useState, useTransition } from 'react';
+import React, { useEffect, useState, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth/AuthContext';
@@ -380,17 +380,19 @@ function WorkspaceContent() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatTicketId, setChatTicketId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<
-    { sender: 'user' | 'lead'; name: string; text: string; time: string }[]
+    { sender: 'user' | 'lead'; name: string; text: string; time: string; source?: string; retry?: {message: string; ticketId?: string} }[]
   >([
     {
       sender: 'lead',
       name: 'Alex Mitchell (Tech Lead)',
       text: "Hey! I'm Alex, your Tech Lead for this project. If you have questions about Java, Spring Boot architecture, unit testing, or specific tickets, ask me here.",
       time: 'Just now',
+      source: 'WELCOME',
     },
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const chatRequestInFlight = useRef(false);
 
   useEffect(() => {
     loadWorkspace();
@@ -484,9 +486,14 @@ function WorkspaceContent() {
     }
   }
 
-  async function handleSendChatMessage(overrideMsg?: string) {
-    const messageToSend = overrideMsg || inputMessage;
+  async function handleSendChatMessage(overrideMsg?: string, retryIndex?: number) {
+    if (chatRequestInFlight.current) return;
+    const originalRequest = retryIndex !== undefined ? chatMessages[retryIndex]?.retry : undefined;
+    if (retryIndex !== undefined && !originalRequest) return;
+    const messageToSend = originalRequest?.message || overrideMsg || inputMessage;
     if (!messageToSend.trim()) return;
+    const request = {message: messageToSend, ticketId: originalRequest ? originalRequest.ticketId : chatTicketId || selectedTicket?.id || undefined};
+    chatRequestInFlight.current = true;
 
     const userMsg = {
       sender: 'user' as const,
@@ -495,37 +502,37 @@ function WorkspaceContent() {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setChatMessages((prev) => [...prev, userMsg]);
-    if (!overrideMsg) setInputMessage('');
+    if (retryIndex === undefined) setChatMessages((prev) => [...prev, userMsg]);
+    if (!overrideMsg && retryIndex === undefined) setInputMessage('');
     setIsSendingMessage(true);
 
     try {
-      const res = await api.chatWithTechLead({
-        ticketId: chatTicketId || selectedTicket?.id || undefined,
-        message: messageToSend,
-      });
+      const res = await api.chatWithTechLead(request);
 
       const leadMsg = {
         sender: 'lead' as const,
         name: `${res.data.senderName} (${res.data.senderRole})`,
         text: res.data.response,
+        source: res.data.source || 'UNKNOWN',
+        retry: res.data.retryable ? request : undefined,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
 
-      setChatMessages((prev) => [...prev, leadMsg]);
+      setChatMessages((prev) => retryIndex === undefined ? [...prev, leadMsg] : prev.map((msg, i) => i === retryIndex ? leadMsg : msg));
     } catch (err) {
       console.error('AI chat failed:', err);
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          sender: 'lead',
+      const failedMessage = {
+          sender: 'lead' as const,
           name: 'Alex Mitchell (Tech Lead)',
-          text: 'Sorry, I ran into a network issue reviewing that. Make sure the Spring Boot service layer and DTO tests are passing, and ask me again!',
+          text: 'Could not reach the AI service. Check your connection and try again.',
+          source: 'UNAVAILABLE',
+          retry: request,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-      ]);
+        };
+      setChatMessages((prev) => retryIndex === undefined ? [...prev, failedMessage] : prev.map((msg, i) => i === retryIndex ? failedMessage : msg));
     } finally {
       setIsSendingMessage(false);
+      chatRequestInFlight.current = false;
     }
   }
 
@@ -611,7 +618,7 @@ function WorkspaceContent() {
     <div className="page-enter max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       {pipelineRun&&<PipelineModal key={pipelineRun.key} ticketKey={pipelineRun.ticketKey} code={pipelineRun.code} mode={pipelineRun.mode} run={pipelineRun.run} onClose={()=>setPipelineRun(null)} onRerun={()=>setPipelineRun(current=>current?{...current,key:Date.now()}:null)} onNext={workspace.tickets.some(t=>t.status==='TODO')?()=>{setPipelineRun(null);const next=workspace.tickets.find(t=>t.status==='TODO');if(next)openTicketModal(next);}:undefined}/>}
       <JourneyProgress onSprint={loadWorkspace} />
-      <GitHubIntegration enrollmentId={workspace.enrollmentId} onSync={loadWorkspace} onRepositoryChange={setGithubRepoReady}/>
+      <GitHubIntegration enrollmentId={workspace.enrollmentId} onSync={loadWorkspace} onRepositoryChange={setGithubRepoReady} tickets={workspace.tickets} projectName={workspace.project?.name} suggestedTicketKey={workspace.suggestedNextTicketKey}/>
       {/* 1. TOP WORKSPACE BAR */}
       <div className="p-5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -1384,6 +1391,7 @@ function WorkspaceContent() {
                 }`}
               >
                 <span className="text-[10px] text-slate-400 mb-1 px-1">{msg.name}</span>
+                {msg.sender === 'lead' && <span className={`text-[10px] mb-1 px-2 py-0.5 rounded-full ${msg.source === 'GEMINI' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>{msg.source === 'GEMINI' ? 'Live AI' : msg.source === 'OFFLINE' ? 'Offline · AI not configured' : msg.source === 'WELCOME' ? 'Welcome message' : msg.source === 'UNAVAILABLE' ? 'AI unavailable' : 'Source unverified'}</span>}
                 <div
                   className={`p-3 rounded-lg text-xs leading-relaxed max-w-[88%] whitespace-pre-line ${
                     msg.sender === 'user'
@@ -1393,6 +1401,7 @@ function WorkspaceContent() {
                 >
                   {msg.text}
                 </div>
+                {msg.retry && <button disabled={isSendingMessage} onClick={() => void handleSendChatMessage(undefined, index)} className="mt-2 text-xs font-semibold text-violet-600 disabled:opacity-50">Try again</button>}
                 <span className="text-[9px] text-slate-400 mt-1 px-1">{msg.time}</span>
               </div>
             ))}
@@ -1400,7 +1409,7 @@ function WorkspaceContent() {
             {isSendingMessage && (
               <div className="flex items-center gap-2 text-xs text-slate-400 p-2">
                 <div className="w-3 h-3 border-2 border-slate-300 border-t-slate-900 dark:border-t-white rounded-full animate-spin" />
-                <span>Alex is typing review guidance...</span>
+                <span role="status">Contacting AI… Temporary server failures are retried up to twice.</span>
               </div>
             )}
           </div>

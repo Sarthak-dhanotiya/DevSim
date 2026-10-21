@@ -54,8 +54,8 @@ c:\virtualcompany\
 │       │   │       ├── project/ (Project, ProjectTechnology, ProjectController, Admin)
 │       │   │       └── enrollment/ (StudentProjectEnrollment, EnrollmentController, Service)
 │       │   └── resources/
-│       │       ├── application.yml
-│       │       ├── application-dev.yml
+│       │       ├── application.properties
+│       │       ├── application-prod.properties
 │       │       └── db/migration/
 │       │           ├── V1__init_schema.sql
 │       │           └── V2__seed_initial_data.sql
@@ -91,6 +91,8 @@ c:\virtualcompany\
 ---
 
 ## 3. Quick Start Instructions
+
+For direct IDE runs and the complete environment setup, see [backend/CONFIGURATION.md](backend/CONFIGURATION.md).
 
 ### Prerequisites
 - Java 21 (verify with `java -version`)

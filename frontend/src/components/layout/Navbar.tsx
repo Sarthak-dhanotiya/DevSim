@@ -144,6 +144,11 @@ export function Navbar() {
                   </Button>
                 </Link>
 
+                <Link href="/my-portfolio" className="hidden sm:block">
+                  <Button variant={pathname === '/my-portfolio' ? 'primary' : 'outline'} size="sm" className="text-xs">
+                    My work
+                  </Button>
+                </Link>
                 <Link href="/profile" className="hidden sm:block">
                   <Button
                     variant={pathname === '/profile' ? 'primary' : 'outline'}
@@ -180,7 +185,7 @@ export function Navbar() {
         </div>
         <nav aria-label="Mobile navigation" className="md:hidden flex items-center gap-1 overflow-x-auto pb-2">
           {navLinks.map(link => <Link key={link.href} href={link.href} className={`shrink-0 rounded-lg px-3 py-2 text-xs transition-colors ${pathname.startsWith(link.href) ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300' : 'text-slate-500 hover:bg-violet-500/10'}`}>{link.label}</Link>)}
-          {user && <><Link href="/workspace" className="shrink-0 rounded-lg px-3 py-2 text-xs text-violet-500">Workspace</Link><Link href="/profile" className="shrink-0 rounded-lg px-3 py-2 text-xs text-slate-500">Profile</Link></>}
+          {user && <><Link href="/workspace" className="shrink-0 rounded-lg px-3 py-2 text-xs text-violet-500">Workspace</Link><Link href="/my-portfolio" className="shrink-0 rounded-lg px-3 py-2 text-xs text-violet-500">My work</Link><Link href="/profile" className="shrink-0 rounded-lg px-3 py-2 text-xs text-slate-500">Profile</Link></>}
           {user && user.role === 'SUPER_ADMIN' && <Link href="/super-admin" className="shrink-0 rounded-lg px-3 py-2 text-xs text-violet-500">Admin</Link>}
         </nav>
       </div>

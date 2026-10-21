@@ -8,7 +8,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,7 +16,6 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1")
-@RequiredArgsConstructor
 @Tag(name = "Workspace & Tickets", description = "Simulated development workspace, Kanban tickets, and AI Tech Lead")
 public class WorkspaceController {
 
@@ -25,6 +23,16 @@ public class WorkspaceController {
     private final com.virtualcompany.modules.ticket.repository.ProjectTicketRepository ticketRepository;
     private final com.virtualcompany.modules.ticket.repository.StudentTicketProgressRepository progressRepository;
     private final com.virtualcompany.modules.journey.JourneyRepository journeys;
+
+    public WorkspaceController(com.virtualcompany.modules.enrollment.repository.EnrollmentRepository enrollmentRepository, com.virtualcompany.modules.ticket.repository.ProjectTicketRepository ticketRepository, com.virtualcompany.modules.ticket.repository.StudentTicketProgressRepository progressRepository, com.virtualcompany.modules.journey.JourneyRepository journeys, TicketService ticketService, AiTechLeadService aiTechLeadService) {
+        this.enrollmentRepository = enrollmentRepository;
+        this.ticketRepository = ticketRepository;
+        this.progressRepository = progressRepository;
+        this.journeys = journeys;
+        this.ticketService = ticketService;
+        this.aiTechLeadService = aiTechLeadService;
+    }
+
     private void verifyAssignmentApproved(com.virtualcompany.common.security.UserPrincipal user) {
         if (journeys.existsByUserIdAndStatus(user.getId(), "PENDING_REVIEW")) throw new org.springframework.security.access.AccessDeniedException("Your assignment request is awaiting admin approval.");
     }

@@ -109,6 +109,10 @@ export interface WorkspaceData {
 }
 
 export interface AiChatMessage {
+  source?: 'GEMINI' | 'OFFLINE' | 'UNAVAILABLE';
+  reason?: string;
+  retryable?: boolean;
+  attempts?: number;
   senderName: string;
   senderRole: string;
   response: string;

@@ -13,8 +13,8 @@ import java.util.regex.*;
 @Service
 public class GithubReviewer {
     private final GithubClient github;private final ObjectMapper json;private final RestClient ai;
-    @Value("${ai.gemini.api-key:${GEMINI_API_KEY:}}") private String key;
-    @Value("${ai.gemini.model:${GEMINI_MODEL:gemini-3.8-flash}}") private String model;
+    @Value("${app.gemini.api-key:}") private String key;
+    @Value("${app.gemini.model:gemini-1.5-flash}") private String model;
     private final GithubBot botAuth;
     public GithubReviewer(GithubClient github,ObjectMapper json,GithubBot botAuth){this.github=github;this.json=json;this.botAuth=botAuth;var f=new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());f.setReadTimeout(Duration.ofSeconds(40));ai=RestClient.builder().requestFactory(f).build();}
     public record Review(String status,String body,boolean approved){}

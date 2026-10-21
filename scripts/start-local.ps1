@@ -1,5 +1,14 @@
 param([switch]$Build, [switch]$RestartBackend, [switch]$CheckBackendOwner)
 $ErrorActionPreference = 'Stop'
+function Get-DevSimListener([int]$Port) {
+    try {
+        Get-NetTCPConnection -State Listen -ErrorAction Stop |
+        Where-Object { $_.LocalPort -eq $Port } | Select-Object -First 1
+    }
+    catch {
+        throw "Cannot check port $Port. Windows reported: $($_.Exception.Message). Check Windows permissions before retrying."
+    }
+}
 $taskRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 & (Join-Path $PSScriptRoot 'load-local-env.ps1') -Root $taskRoot
 $taskLogs = Join-Path $taskRoot '.local'
@@ -15,7 +24,11 @@ if (-not $CheckBackendOwner) {
         $RestartBackend = $true
     }
 }
-$taskListener = Get-NetTCPConnection -State Listen -LocalPort 8080 -ErrorAction SilentlyContinue | Select-Object -First 1
+$taskListener = Get-DevSimListener 8080
+if ($CheckBackendOwner -and -not $taskListener) {
+    Write-Output 'No backend is listening on port 8080. No process was started or stopped.'
+    exit 0
+}
 if ($taskListener -and ($RestartBackend -or $Build -or $CheckBackendOwner)) {
     $taskProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$($taskListener.OwningProcess)"
     $taskExpectedJar = [System.IO.Path]::GetFullPath((Join-Path $taskRoot 'backend/target/virtualcompany-backend-0.0.1-SNAPSHOT.jar'))
@@ -29,7 +42,8 @@ if ($taskListener -and ($RestartBackend -or $Build -or $CheckBackendOwner)) {
             try {
                 $ErrorActionPreference = 'Continue'
                 $taskDirectoryLine = & $taskJcmd $taskProcess.ProcessId VM.system_properties 2>$null | Where-Object { $_ -like 'user.dir=*' } | Select-Object -First 1
-            } finally { $ErrorActionPreference = $taskPreviousPreference }
+            }
+            finally { $ErrorActionPreference = $taskPreviousPreference }
             if ($taskDirectoryLine) {
                 $taskWorkingDirectory = $taskDirectoryLine.Substring('user.dir='.Length).Replace('\:', ':').Replace('\\', '\').Replace('/', '\')
                 $taskOwnsBackend = $taskWorkingDirectory -eq (Join-Path $taskRoot 'backend')
@@ -58,9 +72,21 @@ if ($Build) {
 if (-not $taskListener) {
     $taskJar = Join-Path $taskRoot 'backend/target/virtualcompany-backend-0.0.1-SNAPSHOT.jar'
     if (-not (Test-Path -LiteralPath $taskJar)) { throw 'Run this script with -Build first.' }
-    Start-Process -FilePath (Get-Command java.exe).Source -ArgumentList @('-jar', $taskJar, '--server.address=127.0.0.1') -WorkingDirectory "$taskRoot/backend" -WindowStyle Hidden -RedirectStandardOutput "$taskLogs/backend.log" -RedirectStandardError "$taskLogs/backend-error.log" | Out-Null
+    $taskBackend = Start-Process -FilePath (Get-Command java.exe).Source -ArgumentList @('-jar', $taskJar, '--server.address=127.0.0.1') -WorkingDirectory "$taskRoot/backend" -WindowStyle Hidden -RedirectStandardOutput "$taskLogs/backend.log" -RedirectStandardError "$taskLogs/backend-error.log" -PassThru
+    Write-Output 'Waiting for the DevSim backend to start...'
+    $taskStartupDeadline = (Get-Date).AddSeconds(90)
+    do {
+        Start-Sleep -Seconds 2
+        $taskBackend.Refresh()
+        if ($taskBackend.HasExited) { throw "Backend exited during startup. See $taskLogs/backend.log and $taskLogs/backend-error.log." }
+        $taskListener = Get-DevSimListener 8080
+    } while ((-not $taskListener -or $taskListener.OwningProcess -ne $taskBackend.Id) -and (Get-Date) -lt $taskStartupDeadline)
+    if (-not $taskListener -or $taskListener.OwningProcess -ne $taskBackend.Id) {
+        throw "Backend did not become ready within 90 seconds. See $taskLogs/backend.log."
+    }
+    Write-Output 'DevSim backend is ready.'
 }
-if (-not (Get-NetTCPConnection -State Listen -LocalPort 3000 -ErrorAction SilentlyContinue)) {
+if (-not (Get-DevSimListener 3000)) {
     Start-Process -FilePath (Get-Command node.exe).Source -ArgumentList @("$taskRoot/frontend/node_modules/next/dist/bin/next", 'dev', '-p', '3000', '-H', '127.0.0.1') -WorkingDirectory "$taskRoot/frontend" -WindowStyle Hidden -RedirectStandardOutput "$taskLogs/frontend.log" -RedirectStandardError "$taskLogs/frontend-error.log" | Out-Null
 }
 Write-Output 'Frontend: http://localhost:3000'

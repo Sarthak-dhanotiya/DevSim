@@ -26,5 +26,7 @@ public class VirtualCompanyApplication {
         }
 
         SpringApplication.run(VirtualCompanyApplication.class, args);
+
+        System.out.println("service start successfully");
     }
 }
