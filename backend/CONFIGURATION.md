@@ -47,3 +47,24 @@ The frontend's own local environment file remains `frontend/.env.local`.
 
 Existing local credentials were preserved during migration. Original configuration
 files are backed up under `.local/config-backup-*` (ignored by Git).
+
+## Production email on Render
+
+Render Free blocks SMTP ports 25, 465 and 587. Use Resend over HTTPS.
+
+1. Add a domain you control at https://resend.com/domains, publish the DNS
+   records it provides, and wait until verified.
+2. Create a Resend API key with sending permission for that domain.
+3. In Render backend Environment set SPRING_PROFILES_ACTIVE=prod,
+   MAIL_PROVIDER=resend, RESEND_API_KEY=<private API key>,
+   RESEND_FROM=DevSim <noreply@your-verified-domain.com>, and
+   FRONTEND_URL=https://dev-sim-livid.vercel.app.
+4. Save and redeploy. Request a fresh registration/reset code and check
+   Resend's email dashboard for delivery or bounce status.
+
+The resend.dev test sender can only email the Resend account owner. Production
+sending to other users requires your own verified domain. Gmail and the Vercel
+hostname cannot serve as your verified sender domain. Keep the API key only on
+the backend. Resend failures never fall back to blocked SMTP. Provider acceptance
+does not guarantee inbox delivery. Failed emails have no durable retry queue;
+request a fresh code after fixing configuration. Passwords and OTPs are not logged.

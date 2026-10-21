@@ -38,6 +38,9 @@ public class EmailService {
     @Value("${app.mail.resend-api-key:${RESEND_API_KEY:}}")
     private String resendApiKey;
 
+    @Value("${app.mail.provider:auto}")
+    private String provider;
+
     public EmailService(@Autowired(required = false) JavaMailSender mailSender) {
         this.mailSender = Optional.ofNullable(mailSender);
         this.httpClient = HttpClient.newBuilder()
@@ -49,7 +52,6 @@ public class EmailService {
         log.info("==================================================================");
         log.info("🔑 [DEVSIM CREDENTIALS] Generated login credentials for [{}]", toEmail);
         log.info("   Student Name: {}", studentName);
-        log.info("   Password:     {}", generatedPassword);
         log.info("==================================================================");
 
         String subject = "Welcome to DevSim — Your Developer Account Credentials";
@@ -110,7 +112,6 @@ public class EmailService {
         log.info("==================================================================");
         log.info("🔢 [DEVSIM OTP] Password reset verification code for [{}]", toEmail);
         log.info("   Student Name: {}", studentName);
-        log.info("   OTP Code:     {} (valid for 10 minutes)", otpCode);
         log.info("==================================================================");
 
         String subject = "DevSim — Password Reset Verification Code";
@@ -171,13 +172,17 @@ public class EmailService {
     public void sendRegistrationVerification(String email,String code) {
         sendEmailAsync(email,"Verify your DevSim email", "<h2>Your first day at DevSim</h2><p>Enter this code to verify your email:</p><p style='font-size:28px;font-weight:bold'>"+code+"</p><p>Expires in 10 minutes. If you did not request this, ignore this email.</p>");
     }
-    private void sendEmailAsync(String toEmail, String subject, String htmlContent) {
-        CompletableFuture.runAsync(() -> {
+    CompletableFuture<Void> sendEmailAsync(String toEmail, String subject, String htmlContent) {
+        return CompletableFuture.runAsync(() -> {
             try {
                 // 1. Try Resend HTTPS API if API key configured (Render Free friendly on port 443)
-                if (resendApiKey != null && !resendApiKey.isBlank()) {
+                if ("resend".equalsIgnoreCase(provider) || (resendApiKey != null && !resendApiKey.isBlank())) {
+                    if (resendApiKey == null || resendApiKey.isBlank() || resendFrom == null || resendFrom.isBlank()) {
+                        throw new IllegalStateException("Set RESEND_API_KEY and RESEND_FROM to a verified-domain sender on the backend");
+                    }
                     boolean sent = sendViaResend(toEmail, subject, htmlContent);
-                    if (sent) return;
+                    if (!sent) throw new IllegalStateException("Resend did not accept email; check provider configuration and dashboard");
+                    return;
                 }
 
                 // 2. Try SMTP if mail credentials configured
@@ -189,7 +194,7 @@ public class EmailService {
                     return;
                 }
 
-                log.info("📬 [MOCK EMAIL] Real dispatch skipped. Credentials/OTP are logged above.");
+                log.error("Email not sent: configure RESEND_API_KEY and RESEND_FROM, or local SMTP credentials");
             } catch (Exception ex) {
                 log.warn("Email delivery failed to {}: {}. Continuing without breaking user flow.", toEmail, ex.getMessage());
             }
@@ -205,9 +210,7 @@ public class EmailService {
         try {
             // Resend requires verified domain OR 'DevSim Platform <onboarding@resend.dev>'
             // It rejects public domains like @gmail.com as the 'from' address
-            String from = (resendFrom != null && !resendFrom.isBlank())
-                    ? resendFrom.trim()
-                    : "DevSim Platform <onboarding@resend.dev>";
+            String from = resendFrom.trim();
 
             Map<String, Object> payload = Map.of(
                     "from", from,
@@ -228,13 +231,16 @@ public class EmailService {
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                log.info("Email delivered via Resend HTTPS API (Port 443) to {}", toEmail);
+                log.info("Email accepted by Resend HTTPS API to {}", toEmail);
                 return true;
             } else {
-                log.warn("Resend API status {}: {}. Falling back...", response.statusCode(), response.body());
+                log.warn("Resend rejected email: HTTP {}. Check provider dashboard for domain verification, API key permissions and sending limits.", response.statusCode());
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Resend HTTPS request interrupted");
         } catch (Exception e) {
-            log.warn("Resend HTTPS API dispatch failed: {}. Falling back...", e.getMessage());
+            log.warn("Resend HTTPS API dispatch failed: {}", e.getMessage());
         }
         return false;
     }
@@ -254,7 +260,7 @@ public class EmailService {
             sender.send(message);
             log.info("Email successfully sent via SMTP to {}", toEmail);
         } catch (Exception ex) {
-            log.warn("SMTP send failed to {} (Render Free tier blocks outbound SMTP ports 25/465/587): {}. (Credentials/OTP are logged above)", toEmail, ex.getMessage());
+            log.warn("SMTP send failed to {} (Render Free tier blocks outbound SMTP ports 25/465/587): {}.", toEmail, ex.getMessage());
         }
     }
 }
